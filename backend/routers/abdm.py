@@ -23,6 +23,23 @@ router = APIRouter(prefix="/api/abdm", tags=["ABDM ABHA Verification"])
 # Standard pre-configured Indian patient demo personas for rapid kiosk testing & evaluation
 DEMO_PERSONAS = [
     {
+        "id": "demo_hasan",
+        "name": "Hasan Mujtaba",
+        "age": 19,
+        "gender": "M",
+        "dob": "2007-05-14",
+        "abha_number": "91-8841-9204-7210",
+        "abha_address": "hasan.m@abdm",
+        "mobile": "+919876543210",
+        "location": "Mathurapur, Bareilly",
+        "district": "Bareilly",
+        "state": "Uttar Pradesh",
+        "pincode": "243001",
+        "blood_group": "B+",
+        "allergies": "No Known Allergies",
+        "auth_method": "AADHAAR_OTP"
+    },
+    {
         "id": "demo_1",
         "name": "Rajesh Kumar",
         "age": 45,
@@ -35,6 +52,8 @@ DEMO_PERSONAS = [
         "district": "Varanasi",
         "state": "Uttar Pradesh",
         "pincode": "221001",
+        "blood_group": "O+",
+        "allergies": "Penicillin, Dust",
         "auth_method": "AADHAAR_OTP"
     },
     {
@@ -50,6 +69,8 @@ DEMO_PERSONAS = [
         "district": "Patna",
         "state": "Bihar",
         "pincode": "800001",
+        "blood_group": "A+",
+        "allergies": "Sulfa drugs",
         "auth_method": "MOBILE_OTP"
     },
     {
@@ -65,6 +86,8 @@ DEMO_PERSONAS = [
         "district": "Ernakulam",
         "state": "Kerala",
         "pincode": "682016",
+        "blood_group": "AB+",
+        "allergies": "No Known Allergies",
         "auth_method": "QR_CODE"
     },
     {
@@ -80,6 +103,8 @@ DEMO_PERSONAS = [
         "district": "Jaipur",
         "state": "Rajasthan",
         "pincode": "302020",
+        "blood_group": "B-",
+        "allergies": "Peanuts",
         "auth_method": "AADHAAR_OTP"
     }
 ]
@@ -135,6 +160,8 @@ def get_or_create_abha_user(
                 district=persona["district"],
                 state=persona["state"],
                 pincode=persona["pincode"],
+                blood_group=persona.get("blood_group", "B+"),
+                allergies=persona.get("allergies", "No Known Allergies"),
                 auth_method=auth_method or persona["auth_method"],
                 verification_status="VERIFIED"
             )
@@ -179,6 +206,9 @@ def get_or_create_abha_user(
             district=overrides.get("district", "New Delhi") if overrides else "New Delhi",
             state=overrides.get("state", "Delhi") if overrides else "Delhi",
             pincode=overrides.get("pincode", "110001") if overrides else "110001",
+            blood_group=overrides.get("blood_group", "B+") if overrides else "B+",
+            allergies=overrides.get("allergies", "No Known Allergies") if overrides else "No Known Allergies",
+            profile_photo=overrides.get("profile_photo", None) if overrides else None,
             auth_method=auth_method,
             verification_status="VERIFIED"
         )
@@ -208,7 +238,9 @@ def get_demo_profiles():
             "address": p["location"],
             "dist_name": p["district"],
             "state_name": p["state"],
-            "pincode": p["pincode"]
+            "pincode": p["pincode"],
+            "blood_group": p.get("blood_group", "B+"),
+            "allergies": p.get("allergies", "No Known Allergies")
         }
         results.append({
             "id": p["id"],
@@ -222,6 +254,8 @@ def get_demo_profiles():
             "state": p["state"],
             "mobile": p["mobile"],
             "dob": p["dob"],
+            "blood_group": p.get("blood_group", "B+"),
+            "allergies": p.get("allergies", "No Known Allergies"),
             "sample_qr": json.dumps(qr_payload)
         })
     return {"status": "success", "profiles": results}
@@ -287,6 +321,9 @@ def confirm_auth(payload: AbhaAuthConfirmRequest, db: Session = Depends(get_db))
             "district": user.district or "District HQ",
             "state": user.state or "State",
             "pincode": user.pincode or "110001",
+            "blood_group": user.blood_group or "B+",
+            "allergies": user.allergies or "No Known Allergies",
+            "profile_photo": user.profile_photo,
             "auth_method": user.auth_method or "OTP_VERIFIED",
             "verification_status": "VERIFIED"
         }
@@ -374,6 +411,9 @@ def verify_qr(payload: AbhaQrVerifyRequest, db: Session = Depends(get_db)):
             "district": user.district or district,
             "state": user.state or state,
             "pincode": user.pincode or pincode,
+            "blood_group": user.blood_group or "B+",
+            "allergies": user.allergies or "No Known Allergies",
+            "profile_photo": user.profile_photo,
             "auth_method": "QR_CODE",
             "verification_status": "VERIFIED"
         }

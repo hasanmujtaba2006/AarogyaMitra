@@ -1,7 +1,22 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { FileText, ArrowRight, UserCheck, Stethoscope, Sparkles, LogOut, CheckCircle, ShieldAlert, ShieldCheck } from 'lucide-react'
+import { 
+  FileText, 
+  ArrowRight, 
+  Stethoscope, 
+  Sparkles, 
+  LogOut, 
+  CheckCircle,
+  CheckCircle2, 
+  ShieldAlert, 
+  User, 
+  FolderHeart, 
+  Clock,
+  RefreshCw,
+  Pill,
+  Eye
+} from 'lucide-react'
 
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
@@ -10,14 +25,20 @@ import LanguageSelector from '@/components/LanguageSelector'
 import LanguageSwitcher from '@/components/LanguageSwitcher'
 import AudioMic from '@/components/AudioMic'
 import PrescScanner from '@/components/PrescScanner'
-import { PatientInfo } from '@/components/AbhaCard'
+import AbhaCard, { PatientInfo } from '@/components/AbhaCard'
+import ProfileSection from '@/components/ProfileSection'
+import MedicalRecordsView, { ScannedPrescriptionDetails } from '@/components/MedicalRecordsView'
+import VisitsTimelineView from '@/components/VisitsTimelineView'
 import { LanguageCode, useLanguage } from '@/context/LanguageContext'
+import { transliterateName } from '@/lib/transliterate'
 
 interface Message {
   role: 'user' | 'assistant';
   message: string;
   translated_message?: string;
 }
+
+type PatientTab = 'profile' | 'scan_prescription' | 'doctor_ai' | 'medical_record' | 'timeline'
 
 export default function KioskPage() {
   const { language, setLanguage, setHasLoggedIn, t } = useLanguage()
@@ -26,15 +47,21 @@ export default function KioskPage() {
   const [sessionId, setSessionId] = useState('')
   const [patient, setPatient] = useState<PatientInfo | null>(null)
   
-  // Navigation Phase: 'language_select' | 'login' | 'presc_choice' | 'presc_scan' | 'chat' | 'complete'
-  const [phase, setPhase] = useState<'language_select' | 'login' | 'presc_choice' | 'presc_scan' | 'chat' | 'complete'>('language_select')
+  // Navigation Phase when not logged in: 'language_select' | 'login'
+  const [phase, setPhase] = useState<'language_select' | 'login'>('language_select')
   
+  // Patient Pages Switching List (5 tabs)
+  const [activeTab, setActiveTab] = useState<PatientTab>('profile')
+
   // Chat state
   const [messages, setMessages] = useState<Message[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
   const [sessionSummary, setSessionSummary] = useState('')
   const [triageAlerted, setTriageAlerted] = useState(false)
   const [ocrText, setOcrText] = useState('')
+  const [scannedDetails, setScannedDetails] = useState<ScannedPrescriptionDetails | null>(null)
+  const [scanSuccess, setScanSuccess] = useState(false)
+  const [isConsultationFinished, setIsConsultationFinished] = useState(false)
 
   useEffect(() => {
     // Generate unique session ID on page load
@@ -45,17 +72,29 @@ export default function KioskPage() {
       const savedLang = localStorage.getItem('aarogya_preferred_language') as LanguageCode | null
       const hasAlreadyLoggedIn = localStorage.getItem('aarogya_has_logged_in') === 'true'
       const savedPatient = localStorage.getItem('aarogya_patient_info')
+      const savedOcr = localStorage.getItem('aarogya_ocr_text')
+      const savedDetails = localStorage.getItem('aarogya_scanned_details')
 
       if (savedLang && ['en', 'hi', 'ta', 'te'].includes(savedLang)) {
         setLanguage(savedLang)
       }
 
+      if (savedOcr) {
+        setOcrText(savedOcr)
+      }
+
+      if (savedDetails) {
+        try {
+          setScannedDetails(JSON.parse(savedDetails))
+          setScanSuccess(true)
+        } catch (e) {}
+      }
+
       if (hasAlreadyLoggedIn && savedLang) {
-        // User previously logged in with preferred language, do NOT ask repeatedly!
         if (savedPatient) {
           try {
             setPatient(JSON.parse(savedPatient))
-            setPhase('presc_choice')
+            setActiveTab('profile')
             return
           } catch (e) {
             // fallback to login
@@ -107,11 +146,22 @@ export default function KioskPage() {
       })
     }).catch(err => console.error("Session creation error:", err))
 
-    setPhase('presc_choice')
+    // Default to First tab: "Profile"
+    setActiveTab('profile')
   }
 
-  const handleScanComplete = (extractedOcr: string) => {
+  const handleScanComplete = (extractedOcr: string, details?: any) => {
     setOcrText(extractedOcr)
+    if (details) {
+      setScannedDetails(details)
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('aarogya_scanned_details', JSON.stringify(details))
+      }
+    }
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('aarogya_ocr_text', extractedOcr)
+    }
+    setScanSuccess(true)
     
     // Save OCR in backend session
     fetch('/api/ocr/save-text', {
@@ -120,16 +170,14 @@ export default function KioskPage() {
       body: JSON.stringify({ session_id: sessionId, text: extractedOcr })
     }).catch(err => console.error("OCR save error:", err))
 
-    // Automatically trigger initial chat query using OCR data
-    const initialPrompt = `Hello, I have scanned my old prescription. Here is the text: ${extractedOcr}. Let's discuss my current issues.`
-    submitMessageToChat(initialPrompt, true)
-    setPhase('chat')
+    // Automatically structured and linked to Medical Records.
+    // Stays on the scan prescription page and shows the success message.
   }
 
   const submitMessageToChat = async (text: string, isOcrSystemInit = false) => {
     setIsProcessing(true)
     
-    // Optimistically update message history client-side (unless initialized silently via prescription)
+    // Optimistically update message history client-side
     if (!isOcrSystemInit) {
       setMessages(prev => [...prev, { role: 'user', message: text, translated_message: text }])
     }
@@ -166,7 +214,7 @@ export default function KioskPage() {
       // Check if session completed
       if (data.status === 'completed') {
         setSessionSummary(data.summary || '')
-        setPhase('complete')
+        setIsConsultationFinished(true)
       }
 
     } catch (err) {
@@ -208,14 +256,14 @@ export default function KioskPage() {
       })
       if (res.ok) {
         const data = await res.json()
-        setSessionSummary(data.summary || 'Summary compiled')
-        setPhase('complete')
+        setSessionSummary(data.summary || 'Clinical intake summary compiled.')
+        setIsConsultationFinished(true)
       } else {
-        setPhase('complete')
+        setIsConsultationFinished(true)
       }
     } catch {
-      setSessionSummary('Mock Summary: Patient reports mild chest pain and history of high blood pressure.')
-      setPhase('complete')
+      setSessionSummary('Patient reports mild chest discomfort and history of hypertension.')
+      setIsConsultationFinished(true)
     } finally {
       setIsProcessing(false)
     }
@@ -227,208 +275,483 @@ export default function KioskPage() {
     setSessionSummary('')
     setTriageAlerted(false)
     setOcrText('')
+    setScannedDetails(null)
+    setScanSuccess(false)
+    setIsConsultationFinished(false)
     if (typeof window !== 'undefined') {
       localStorage.removeItem('aarogya_patient_info')
+      localStorage.removeItem('aarogya_scanned_details')
+      localStorage.removeItem('aarogya_ocr_text')
     }
-    // After logging in once, stay on login without asking language repeatedly
     setPhase('login')
     setSessionId('session_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now())
   }
 
+  // Define the 5 pages switching list exactly as requested
+  const navigationTabs: { id: PatientTab; label: string; icon: any }[] = [
+    {
+      id: 'profile',
+      label: t('Profile', 'प्रोफ़ाइल', 'சுயவிவரம்', 'ప్రొఫైల్'),
+      icon: User
+    },
+    {
+      id: 'scan_prescription',
+      label: t('Scan Prescription', 'पर्चा स्कैन करें', 'மருந்துச்சீட்டு ஸ்கேன்', 'ప్రిస్క్రిప్షన్ స్కాన్'),
+      icon: FileText
+    },
+    {
+      id: 'doctor_ai',
+      label: t('Consulting Doctor AI', 'डॉक्टर एआई परामर्श', 'மருத்துவர் AI ஆலோசனை', 'డాక్టర్ AI సంప్రదింపు'),
+      icon: Stethoscope
+    },
+    {
+      id: 'medical_record',
+      label: t('Medical Records', 'मेडिकल रिकॉर्ड्स', 'மருத்துவப் பதிவுகள்', 'మెడికల్ రికార్డులు'),
+      icon: FolderHeart
+    },
+    {
+      id: 'timeline',
+      label: t('Previous Visit Timeline', 'पूर्व विज़िट टाइमलाइन', 'முந்தைய வருகைகள்', 'మునుపటి సందర్శనలు'),
+      icon: Clock
+    }
+  ]
+
   return (
-    <div className="min-h-screen flex flex-col justify-between">
+    <div className="min-h-screen flex flex-col justify-between bg-slate-50/60 print:bg-white">
       <Header />
-      <main className="flex-1 flex flex-col justify-center py-6 px-4">
-      {/* Session Progress Header */}
-      {patient && (
-        <div className="max-w-4xl mx-auto w-full bg-slate-900 text-white rounded-3xl p-5 mb-4 shadow-lg border-2 border-slate-800 flex flex-wrap justify-between items-center gap-4">
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <UserCheck className="w-10 h-10 text-emerald-400" />
-              <ShieldCheck className="w-5 h-5 text-emerald-300 absolute -bottom-1 -right-1 bg-slate-900 rounded-full" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{t('PATIENT REGISTERED', 'पंजीकृत रोगी', 'பதிவுசெய்யப்பட்ட நோயாளி', 'రిజిస్టర్డ్ రోగి')}</span>
-                <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-emerald-500/40">
-                  ABHA VERIFIED
-                </span>
-              </div>
-              <h3 className="text-2xl font-black">
-                {patient.full_name} ({patient.gender === 'M' ? t('Male', 'पुरुष', 'ஆண்', 'పురుషుడు') : t('Female', 'महिला', 'பெண்', 'స్త్రీ')})
-              </h3>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 flex-wrap">
-            {/* Dashboard Option to Switch App Language */}
-            <LanguageSwitcher
-              variant="dashboard"
-              onLanguageChange={handleDashboardLanguageChange}
-            />
-            <span className="font-mono text-base font-bold bg-slate-800 px-4 py-2 rounded-xl border border-slate-700 text-emerald-300">
-              ABHA: {patient.abha_number}
-            </span>
-            <button
-              onClick={handleRestart}
-              className="bg-red-700/80 hover:bg-red-700 p-3 rounded-xl transition-all"
-              title={t('Logout / End Session', 'लॉग आउट / सत्र समाप्त करें', 'வெளியேறு', 'లాగౌట్')}
-            >
-              <LogOut className="w-6 h-6" />
-            </button>
-          </div>
-        </div>
-      )}
+      <main className="flex-1 flex flex-col justify-start py-4 sm:py-6 px-2.5 sm:px-6 print:p-0 print:m-0 print:block">
+        {patient ? (
+          /* =========================================================================
+             LOGGED-IN PATIENT PORTAL
+             ========================================================================= */
+          <div className="max-w-6xl mx-auto w-full flex flex-col gap-4 sm:gap-6 print:gap-0 print:max-w-full">
+            
+            {/* UNIFIED PATIENT PORTAL HEADER CARD (Welcome, Language, Navigation Tabs & Logout) */}
+            <div className="w-full bg-slate-900 text-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xl sm:shadow-2xl border sm:border-2 border-slate-800 flex flex-col gap-4 sm:gap-5 print:hidden">
+              {/* TOP ROW: Welcome Message (Left) & Language Dropdown (Right) */}
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
+                <div className="flex-1">
+                  {(() => {
+                    const rawName = patient?.full_name?.trim() || ''
+                    const nameEn = rawName
+                    const nameHi = transliterateName(rawName, 'hi')
+                    const nameTa = transliterateName(rawName, 'ta')
+                    const nameTe = transliterateName(rawName, 'te')
 
-      {/* Emergency Triage Indicator Banner */}
-      {triageAlerted && (
-        <div className="max-w-4xl mx-auto w-full bg-red-50 border-4 border-red-600 rounded-3xl p-6 mb-6 flex items-start gap-4 shadow-xl">
-          <ShieldAlert className="w-12 h-12 text-red-600 shrink-0 animate-bounce" />
-          <div>
-            <h4 className="text-2xl font-black text-red-800">
-              {t('EMERGENCY TRIAGE ALERT TRIGGERED', 'आपातकालीन ट्राइएज चेतावनी जारी', 'அவசர சிகிச்சை எச்சரிக்கை தூண்டப்பட்டது', 'అత్యవసర ట్రయాజ్ అలర్ట్ యాక్టివేట్ చేయబడింది')}
-            </h4>
-            <p className="text-lg font-bold text-red-700 mt-1">
-              {t('Symptoms indicate a high-priority emergency. Kiosk is alerting OPD nurses immediately.', 'लक्षण गंभीर हैं। नर्स को सूचित किया जा रहा है।', 'அறிகுறிகள் அவசரநிலையைக் குறிக்கின்றன. மருத்துவமனைக்குத் தகவல் அனுப்பப்படுகிறது.', 'లక్షణాలు అత్యవసర పరిస్థితిని సూచిస్తున్నాయి. నర్సులకు సమాచారం అందుతోంది.')}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* PHASE 0: PREFERRED LANGUAGE SELECTION (Asked on website before login) */}
-      {phase === 'language_select' && (
-        <LanguageSelector onLanguageSelected={handleLanguageSelected} />
-      )}
-
-      {/* PHASE 1: LOGIN / REGISTRATION */}
-      {phase === 'login' && (
-        <div className="w-full max-w-3xl mx-auto my-6">
-          <div className="flex justify-end items-center mb-2 px-2">
-            <button
-              type="button"
-              onClick={() => setPhase('language_select')}
-              className="text-sm font-black text-blue-700 hover:text-blue-900 underline flex items-center gap-1.5"
-            >
-              <span>{t('Change Preferred Language', 'भाषा बदलें', 'மொழியை மாற்றவும்', 'భాషను మార్చండి')}</span>
-            </button>
-          </div>
-          <AuthScreen
-            language={language}
-            setLanguage={setLanguage}
-            onLoginSuccess={handleLoginSuccess}
-          />
-        </div>
-      )}
-
-      {/* PHASE 2: PRESCRIPTION OPTION QUESTION */}
-      {phase === 'presc_choice' && (
-        <div className="w-full max-w-2xl mx-auto bg-white rounded-3xl border-4 border-blue-900 shadow-2xl p-8 my-6 text-center">
-          <FileText className="w-20 h-20 text-blue-900 mx-auto mb-6" />
-          <h2 className="text-3xl font-extrabold text-blue-900 mb-4">
-            {t('Do you have an old prescription?', 'क्या आपके पास पुराना पर्चा है?', 'உங்களிடம் பழைய மருந்துச்சீட்டு இருக்கிறதா?', 'మీ దగ్గర పాత ప్రిస్క్రిప్షన్ ఉందా?')}
-          </h2>
-          <p className="text-slate-500 text-lg mb-8">
-            {t('If yes, we can scan it to read your previous medicines and diseases.', 'यदि हाँ, तो हम पिछली दवाइयों और बीमारियों को पढ़ने के लिए इसे स्कैन कर सकते हैं।', 'ஆம் எனில், உங்கள் முந்தைய மருந்துகள் மற்றும் நோய்களைப் படிக்க அதை ஸ்கேன் செய்யலாம்.', 'అవునైతే, మీ మునుపటి మందులు మరియు వ్యాధులను చదవడానికి మేము దానిని స్కాన్ చేయవచ్చు.')}
-          </p>
-
-          <div className="flex flex-col sm:flex-row gap-6">
-            <button
-              onClick={() => setPhase('presc_scan')}
-              className="flex-1 h-24 bg-blue-800 hover:bg-blue-900 text-white font-extrabold text-2xl rounded-2xl flex justify-center items-center gap-3 active:scale-95 transition-all shadow-lg"
-            >
-              <span>{t('Yes, Scan Prescription', 'हाँ, पर्चा स्कैन करें', 'ஆம், ஸ்கேன் செய்யவும்', 'అవును, ప్రిస్క్రిప్షన్ స్కాన్ చేయి')}</span>
-              <ArrowRight className="w-8 h-8" />
-            </button>
-            <button
-              onClick={() => {
-                // Trigger initial dialogue greeting from backend
-                submitMessageToChat("Hello, I would like to start the medical history intake.")
-                setPhase('chat')
-              }}
-              className="flex-1 h-24 bg-slate-100 border-4 border-slate-300 hover:bg-slate-200 text-slate-700 font-extrabold text-2xl rounded-2xl active:scale-95 transition-all"
-            >
-              {t('No, Skip Scan', 'नहीं, परामर्श शुरू करें', 'இல்லை, தவிர்த்துவிடவும்', 'లేదు, అవసరం లేదు')}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* PHASE 3: SCANNING THE PRESCRIPTION */}
-      {phase === 'presc_scan' && (
-        <div className="flex flex-col">
-          <PrescScanner language={language} onScanComplete={handleScanComplete} />
-          <button
-            onClick={() => {
-              submitMessageToChat("Hello, I would like to start the medical history intake.")
-              setPhase('chat')
-            }}
-            className="mt-4 max-w-xs mx-auto text-lg text-slate-500 hover:text-slate-700 font-bold underline"
-          >
-            {t('Skip and Go to Chat', 'स्किप करें और बातचीत शुरू करें', 'தவிர்த்துவிட்டு பேச ஆரம்பிக்கவும்', 'స్కిప్ చేసి చాట్ కి వెళ్ళండి')}
-          </button>
-        </div>
-      )}
-
-      {/* PHASE 4: THE DIALOGUE MANAGER CHAT */}
-      {phase === 'chat' && (
-        <div className="flex flex-col items-center">
-          <AudioMic
-            language={language}
-            messages={messages}
-            onSendMessage={submitMessageToChat}
-            isProcessing={isProcessing}
-          />
-          <button
-            onClick={triggerManualCompletion}
-            className="mt-4 h-16 px-8 bg-amber-600 hover:bg-amber-700 text-white text-xl font-bold rounded-2xl active:scale-95 transition-all shadow-md flex items-center gap-2"
-          >
-            <Stethoscope className="w-6 h-6" />
-            <span>{t('Finish & Generate Summary', 'परामर्श समाप्त करें', 'முடித்து சுருக்கத்தை உருவாக்குங்கள்', 'ముగించి సారాంశాన్ని రూపొందించండి')}</span>
-          </button>
-        </div>
-      )}
-
-      {/* PHASE 5: COMPLETED SESSION SUMMARY */}
-      {phase === 'complete' && (
-        <div className="w-full max-w-2xl mx-auto bg-white rounded-3xl border-4 border-emerald-600 shadow-2xl p-8 my-6 text-center">
-          <CheckCircle className="w-24 h-24 text-emerald-600 mx-auto mb-6" />
-          <h2 className="text-4xl font-extrabold text-emerald-800 mb-2">
-            {t('Registration Completed!', 'पंजीकरण सफल रहा!', 'பதிவு முடிந்தது!', 'నమోదు పూర్తయింది!')}
-          </h2>
-          <p className="text-slate-500 text-xl mb-8">
-            {t('Your health details have been sent to the doctor. Please take your token.', 'आपकी बीमारी की जानकारी डॉक्टर को भेज दी गई है। कृपया अपना टोकन नंबर लें।', 'உங்கள் உடல்நல விவரங்கள் மருத்துவருக்கு அனுப்பப்பட்டுள்ளன. தயவுசெய்து டோக்கனைப் பெறவும்.', 'మీ ఆరోగ్య వివరాలు వైద్యునికి పంపబడ్డాయి. దయచేసి మీ టోకెన్ తీసుకోండి.')}
-          </p>
-
-          <div className="bg-emerald-50 rounded-2xl border border-emerald-200 p-6 text-left mb-8">
-            <h3 className="text-2xl font-extrabold text-emerald-950 mb-3 flex items-center gap-2">
-              <Sparkles className="w-7 h-7 text-emerald-700" />
-              <span>{t('OPD Intake Token', 'ओपीडी पर्ची टोकन', 'OPD டோக்கன்', 'OPD టోకెన్')}</span>
-            </h3>
-            <div className="flex justify-between items-center border-b pb-4 mb-4">
-              <span className="text-lg font-bold text-slate-600">{t('Token Number', 'टोकन संख्या', 'டோக்கன் எண்', 'టోకెన్ సంఖ్య')}</span>
-              <span className="text-4xl font-black text-emerald-800">OPD-407</span>
-            </div>
-            {patient && (
-              <div className="grid grid-cols-2 gap-4 text-base font-bold text-slate-700">
-                <div>
-                  <span className="text-slate-400 block text-xs uppercase">{t('Patient Name', 'रोगी का नाम', 'நோயாளி பெயர்', 'రోగి పేరు')}</span>
-                  <span>{patient.full_name}</span>
+                    return (
+                      <h1 className="text-lg sm:text-2xl md:text-3xl font-black tracking-tight text-white leading-snug">
+                        {t(
+                          nameEn
+                            ? `Welcome ${nameEn}, Your Health Matters. We’re Here to Help.`
+                            : "Welcome, Your Health Matters. We’re Here to Help.",
+                          nameHi
+                            ? `स्वागत है ${nameHi}, आपका स्वास्थ्य महत्वपूर्ण है। हम आपकी मदद के लिए यहाँ हैं।`
+                            : "स्वागत है, आपका स्वास्थ्य महत्वपूर्ण है। हम आपकी मदद के लिए यहाँ हैं।",
+                          nameTa
+                            ? `வரவேற்கிறோம் ${nameTa}, உங்கள் ஆரோக்கியம் முக்கியமானது. நாங்கள் உதவ இங்கே இருக்கிறோம்.`
+                            : "வரவேற்கிறோம், உங்கள் ஆரோக்கியம் முக்கியமானது. நாங்கள் உதவ இங்கே இருக்கிறோம்.",
+                          nameTe
+                            ? `స్వాగతం ${nameTe}, మీ ఆరోగ్యం ముఖ్యం. మేము మీకు సహాయం చేయడానికి ఇక్కడ ఉన్నాము.`
+                            : "స్వాగతం, మీ ఆరోగ్యం ముఖ్యం. మేము మీకు సహాయం చేయడానికి ఇక్కడ ఉన్నాము."
+                        )}
+                      </h1>
+                    )
+                  })()}
                 </div>
+
+                {/* Top-Right Corner: Language Change Dropdown List */}
+                <div className="self-end sm:self-center shrink-0">
+                  <LanguageSwitcher
+                    variant="dark-dropdown"
+                    onLanguageChange={handleDashboardLanguageChange}
+                  />
+                </div>
+              </div>
+
+              {/* BOTTOM ROW: 5 Pages Switching List (Left) & Logout Button (Right) */}
+              <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-2.5 sm:gap-3 pt-3 border-t border-slate-800/80">
+                {/* 5 Pages Switching Tabs - Horizontally scrollable without break on mobile */}
+                <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none flex-nowrap sm:flex-wrap -mx-1 px-1">
+                  {navigationTabs.map((tab) => {
+                    const isActive = activeTab === tab.id
+                    const Icon = tab.icon
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setActiveTab(tab.id)}
+                        className={`px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all active:scale-95 flex items-center gap-1.5 sm:gap-2 shrink-0 ${
+                          isActive
+                            ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30 border border-blue-400'
+                            : 'text-slate-300 hover:text-white hover:bg-slate-800/80 border border-slate-700/60'
+                        }`}
+                      >
+                        <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                        <span>{tab.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Bottom-Right Corner: Logout Button */}
+                <div className="self-end sm:self-center shrink-0 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={handleRestart}
+                    className="w-full sm:w-auto px-3.5 sm:px-4 py-1.5 sm:py-2 bg-red-600/90 hover:bg-red-600 active:scale-95 text-white text-xs sm:text-sm font-black rounded-xl transition-all shadow-md shadow-red-900/30 flex items-center justify-center gap-1.5 sm:gap-2 border border-red-500/50"
+                  >
+                    <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    <span>{t('Logout Button', 'लॉग आउट', 'வெளியேறு', 'లాగౌట్')}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Emergency Triage Indicator Banner */}
+            {triageAlerted && (
+              <div className="w-full bg-red-50 border-4 border-red-600 rounded-3xl p-6 flex items-start gap-4 shadow-xl animate-bounce-short">
+                <ShieldAlert className="w-12 h-12 text-red-600 shrink-0" />
                 <div>
-                  <span className="text-slate-400 block text-xs uppercase">ABHA Address</span>
-                  <span>{patient.abha_address}</span>
+                  <h4 className="text-2xl font-black text-red-800">
+                    {t('EMERGENCY TRIAGE ALERT TRIGGERED', 'आपातकालीन ट्राइएज चेतावनी जारी', 'அவசர சிகிச்சை எச்சரிக்கை தூண்டப்பட்டது', 'అత్యవసర ట్రయాజ్ అలర్ట్ యాక్టివేట్ చేయబడింది')}
+                  </h4>
+                  <p className="text-base sm:text-lg font-bold text-red-700 mt-1">
+                    {t('Symptoms indicate a high-priority emergency. Kiosk is alerting OPD nurses immediately.', 'लक्षण गंभीर हैं। नर्स को सूचित किया जा रहा है।', 'அறிகுறிகள் அவசரநிலையைக் குறிக்கின்றன. மருத்துவமனைக்குத் தகவல் அனுப்பப்படுகிறது.', 'లక్షణాలు అత్యవసర పరిస్థితిని సూచిస్తున్నాయి. నర్సులకు సమాచారం అందుతోంది.')}
+                  </p>
                 </div>
               </div>
             )}
-          </div>
 
-          <button
-            onClick={handleRestart}
-            className="w-full h-20 bg-blue-800 hover:bg-blue-900 text-white font-extrabold text-2xl rounded-2xl active:scale-95 transition-all shadow-lg"
-          >
-            {t('Finish & Reset Kiosk', 'अगला रोगी / रीसेट करें', 'அடுத்த நோயாளி / ரீசெட்', 'తదుపరి రోగి / రీసెట్')}
-          </button>
-        </div>
-      )}
+            {/* 3. ACTIVE CONTENT PAGE VIEW */}
+            <div className="w-full min-h-[460px] pb-6">
+              
+              {/* PAGE 1: PROFILE */}
+              {activeTab === 'profile' && (
+                <div className="flex flex-col items-center w-full">
+                  <ProfileSection
+                    patient={patient}
+                    language={language}
+                    onProceed={() => setActiveTab('scan_prescription')}
+                    onUpdatePatient={(updated) => {
+                      setPatient(updated)
+                      if (typeof window !== 'undefined') {
+                        localStorage.setItem('aarogya_patient_info', JSON.stringify(updated))
+                      }
+                    }}
+                    onReset={handleRestart}
+                  />
+                </div>
+              )}
+
+              {/* PAGE 2: SCAN PRESCRIPTION */}
+              {activeTab === 'scan_prescription' && (
+                <div className="flex flex-col items-center max-w-3xl mx-auto w-full space-y-5">
+                  {scanSuccess && (ocrText || scannedDetails) ? (
+                    /* SUCCESS SCREEN - Celebratory confirmation banner & structured preview */
+                    <div className="w-full bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-8 shadow-xl sm:shadow-2xl border-2 border-emerald-500 space-y-4 sm:space-y-6 animate-fade-in">
+                      {/* Celebratory Banner */}
+                      <div className="flex flex-col sm:flex-row items-center sm:items-start gap-3 sm:gap-4 text-center sm:text-left bg-emerald-50/70 border-2 border-emerald-300 p-3.5 sm:p-5 rounded-xl sm:rounded-2xl">
+                        <div className="w-12 h-12 sm:w-14 sm:h-14 bg-emerald-600 text-white rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0 shadow-lg shadow-emerald-700/20">
+                          <CheckCircle2 className="w-7 h-7 sm:w-9 sm:h-9" />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="inline-flex items-center gap-1.5 bg-emerald-200/80 text-emerald-900 text-xs font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-1">
+                            <Sparkles className="w-3.5 h-3.5 text-emerald-800" />
+                            <span>{t('Prescription Digitized & Saved', 'पर्चा डिजिटाइज़ व सहेजा गया', 'மருந்துச்சீட்டு பாதுகாக்கப்பட்டது', 'ప్రిస్క్రిప్షన్ భద్రపరచబడింది')}</span>
+                          </div>
+                          <h2 className="text-xl sm:text-3xl font-black text-emerald-950">
+                            {t('Prescription Scanned Successfully!', 'पर्चा सफलतापूर्वक स्कैन हो गया!', 'மருந்துச்சீட்டு வெற்றிகரமாக ஸ்கேன் செய்யப்பட்டது!', 'ప్రిస్క్రిప్షన్ విజయవంతంగా స్కాన్ చేయబడింది!')}
+                          </h2>
+                          <p className="text-xs sm:text-sm font-bold text-emerald-800">
+                            {t(
+                              'Medical findings, vitals, and prescribed medications have been extracted and automatically added to your Medical Records.',
+                              'पर्चे के सभी लक्षण, जांच रिपोर्ट और दवाइयाँ स्वचालित रूप से आपके मेडिकल रिकॉर्ड में जोड़ दी गई हैं।',
+                              'மருத்துவ விவரங்கள் மற்றும் மருந்துகள் உங்கள் மருத்துவப் பதிவுகளில் தானாகவே சேர்க்கப்பட்டுள்ளன.',
+                              'వైద్య వివరాలు మరియు మందులు స్వయంచాలకంగా మీ వైద్య రికార్డులకు జోడించబడ్డాయి.'
+                            )}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Structured Preview Card */}
+                      <div className="bg-slate-50 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 border border-slate-200 space-y-3 sm:space-y-4 text-left">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+                          <div>
+                            <span className="text-[10px] font-black uppercase text-blue-900 tracking-wider">
+                              {t('Medical Facility', 'अस्पताल / क्लिनिक', 'மருத்துவமனை', 'ఆసుపత్రి')}
+                            </span>
+                            <h3 className="text-sm sm:text-base font-extrabold text-slate-900">
+                              {scannedDetails?.hospital || t('Hospital / Clinic OPD', 'अस्पताल / क्लिनिक ओपीडी', 'மருத்துவமனை OPD', 'ఆసుపత్రి OPD')}
+                            </h3>
+                            {scannedDetails?.location && (
+                              <p className="text-xs text-slate-500">{scannedDetails.location}</p>
+                            )}
+                          </div>
+                          <div className="text-left sm:text-right">
+                            <span className="text-[10px] font-black uppercase text-slate-400 block">
+                              {t('Prescription Date', 'पर्चे की तारीख', 'தேதி', 'తేదీ')}
+                            </span>
+                            <span className="text-xs font-mono font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-200">
+                              {scannedDetails?.date || t('Today', 'आज', 'இன்று', 'ఈరోజు')}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Patient & Diagnosis details */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
+                          <div className="bg-white p-3 rounded-xl border border-slate-200">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase block">{t('Patient Details', 'रोगी विवरण', 'நோயாளி', 'రోగి')}</span>
+                            <p className="text-xs font-black text-slate-800 mt-0.5">
+                              {scannedDetails?.patient_name || patient?.full_name} {scannedDetails?.age ? `(${scannedDetails.age}/${scannedDetails.gender || 'M'})` : ''}
+                            </p>
+                            {scannedDetails?.uhid && <span className="text-[10px] font-mono text-slate-400">UHID: {scannedDetails.uhid}</span>}
+                          </div>
+
+                          <div className="bg-white p-3 rounded-xl border border-slate-200">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase block">{t('Complaints (c/o)', 'शिकायतें', 'அறிகுறிகள்', 'లక్షణాలు')}</span>
+                            <p className="text-xs font-bold text-slate-800 mt-0.5 capitalize">
+                              {scannedDetails?.complaints || t('Not recorded', 'दर्ज नहीं', 'குறிப்பிடப்படவில்லை', 'పేర్కొనబడలేదు')}
+                            </p>
+                          </div>
+
+                          <div className="bg-amber-50 p-3 rounded-xl border border-amber-200">
+                            <span className="text-[10px] font-bold text-amber-800 uppercase block">{t('Impression / Diagnosis', 'निदान (बीमारी)', 'நோய் கண்டறிதல்', 'నిర్ధారణ')}</span>
+                            <p className="text-xs font-black text-amber-900 mt-0.5">
+                              {scannedDetails?.diagnosis || t('Clinical evaluation', 'चिकित्सीय मूल्यांकन', 'மருத்துவ மதிப்பீடு', 'క్లినికల్ మూల్యాంకనం')}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Vitals Bar */}
+                        {scannedDetails?.vitals && (
+                          <div className="bg-white p-3 rounded-xl border border-slate-200 flex flex-wrap items-center gap-2 sm:gap-3 text-xs font-bold">
+                            <span className="text-slate-400 uppercase text-[10px] font-black">{t('Vitals (o/e):', 'वाइटल्स:', 'பரிசோதனை:', 'వైటల్స్:')}</span>
+                            {scannedDetails.vitals.bp && (
+                              <span className="bg-slate-100 px-2.5 py-1 rounded-lg text-slate-800">
+                                BP: <strong className="text-blue-900">{scannedDetails.vitals.bp}</strong>
+                              </span>
+                            )}
+                            {scannedDetails.vitals.pulse && (
+                              <span className="bg-slate-100 px-2.5 py-1 rounded-lg text-slate-800">
+                                Pulse: <strong className="text-blue-900">{scannedDetails.vitals.pulse}</strong>
+                              </span>
+                            )}
+                            {scannedDetails.vitals.rbs && (
+                              <span className="bg-red-50 text-red-700 border border-red-200 px-2.5 py-1 rounded-lg">
+                                RBS: <strong className="font-mono">{scannedDetails.vitals.rbs}</strong>
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Prescribed medicines preview */}
+                        {scannedDetails?.medications && scannedDetails.medications.length > 0 && (
+                          <div className="space-y-1.5">
+                            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                              <Pill className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>{t('Prescribed Medications (Adv):', 'पर्चे की दवाइयाँ:', 'மருந்துகள்:', 'మందులు:')}</span>
+                            </span>
+                            <div className="flex flex-wrap gap-2">
+                              {scannedDetails.medications.map((m: any, mIdx: number) => (
+                                <span key={mIdx} className="inline-flex items-center gap-1.5 bg-emerald-100/70 border border-emerald-300 text-emerald-950 text-xs font-bold px-2.5 sm:px-3 py-1 rounded-xl">
+                                  <span>{m.name}</span>
+                                  {m.route && <span className="text-[10px] font-black text-emerald-800 uppercase bg-white/80 px-1.5 py-0.5 rounded">{m.route}</span>}
+                                  {m.dosage && <span className="text-[10px] text-slate-600 font-medium">({m.dosage})</span>}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Primary Next Action Buttons */}
+                      <div className="flex flex-col sm:flex-row items-center gap-2.5 sm:gap-3 pt-2">
+                        {/* Primary CTA: Go to Medical Records */}
+                        <button
+                          onClick={() => setActiveTab('medical_record')}
+                          className="w-full sm:flex-1 h-12 sm:h-14 bg-blue-900 hover:bg-blue-950 text-white rounded-xl sm:rounded-2xl font-black text-sm sm:text-base flex items-center justify-center gap-2 active:scale-95 transition-all shadow-xl shadow-blue-950/20"
+                        >
+                          <FolderHeart className="w-4 h-4 sm:w-5 sm:h-5 text-blue-300" />
+                          <span>{t('View in Medical Records', 'मेडिकल रिकॉर्ड में देखें', 'மருத்துவப் பதிவுகளில் காண்க', 'మెడికల్ రికార్డులలో చూడండి')}</span>
+                          <ArrowRight className="w-4 h-4 text-blue-300" />
+                        </button>
+
+                        {/* Secondary: Scan Another Document */}
+                        <button
+                          onClick={() => setScanSuccess(false)}
+                          className="w-full sm:w-auto px-4 sm:px-5 h-12 sm:h-14 bg-slate-100 hover:bg-slate-200 border-2 border-slate-300 text-slate-800 rounded-xl sm:rounded-2xl font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2 active:scale-95 transition-all"
+                        >
+                          <RefreshCw className="w-4 h-4" />
+                          <span>{t('Scan Another Document', 'दूसरा पर्चा स्कैन करें', 'மற்றொரு சீட்டை ஸ்கேன் செய்', 'మరొకటి స్కాన్ చేయండి')}</span>
+                        </button>
+
+                        {/* Optional: Consult Doctor AI */}
+                        <button
+                          onClick={() => setActiveTab('doctor_ai')}
+                          className="w-full sm:w-auto px-3.5 sm:px-4 h-12 sm:h-14 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-900 rounded-xl sm:rounded-2xl font-bold text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+                        >
+                          <Stethoscope className="w-4 h-4 text-emerald-700" />
+                          <span>{t('Consult Doctor AI', 'डॉक्टर एआई से परामर्श', 'மருத்துவர் AI ஆலோசனை', 'డాక్టర్ AI సంప్రదించండి')}</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* SCANNER VIEW */
+                    <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-8 shadow-xl border-2 border-slate-100 w-full text-center space-y-3 sm:space-y-4">
+                      <div className="w-14 h-14 sm:w-16 sm:h-16 bg-blue-50 text-blue-900 rounded-2xl border-2 border-blue-200 flex items-center justify-center mx-auto shadow-sm">
+                        <FileText className="w-7 h-7 sm:w-8 sm:h-8" />
+                      </div>
+                      <div>
+                        <h2 className="text-xl sm:text-2xl font-black text-blue-950">
+                          {t('Scan Your Prescription / Medical Document', 'अपना पर्चा या मेडिकल दस्तावेज़ स्कैन करें', 'மருந்துச்சீட்டை ஸ்கேன் செய்யுங்கள்', 'మీ ప్రిస్క్రిప్షన్‌ను స్కాన్ చేయండి')}
+                        </h2>
+                        <p className="text-slate-500 text-xs sm:text-sm mt-1">
+                          {t('Take a photo or upload an image. Our AI will extract previous medicines and health conditions.', 'फोटो खींचें या अपलोड करें। एआई पिछली दवाओं और बीमारियों को स्वतः पढ़ लेगा।', 'புகைப்படம் எடுக்கவும் அல்லது பதிவேற்றவும்.', 'ఫోటో తీయండి లేదా అప్‌లోడ్ చేయండి.')}
+                        </p>
+                      </div>
+
+                      <PrescScanner language={language} onScanComplete={handleScanComplete} />
+
+                      <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-2">
+                        <button
+                          onClick={() => setActiveTab('doctor_ai')}
+                          className="text-xs font-bold text-slate-500 hover:text-blue-800 underline"
+                        >
+                          {t('Skip and Go to Doctor AI Consultation', 'स्किप करें और सीधे परामर्श शुरू करें', 'தவிர்த்துவிட்டு மருத்துவரிடம் செல்லவும்', 'స్కిప్ చేసి డాక్టర్ AI వద్దకు వెళ్లండి')}
+                        </button>
+
+                        {ocrText && (
+                          <button
+                            onClick={() => setScanSuccess(true)}
+                            className="text-xs font-black text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 hover:bg-emerald-100 cursor-pointer"
+                          >
+                            {t('View Saved Scan Result', 'सहेजा गया पर्चा देखें', 'சேமிக்கப்பட்ட முடிவைக் காண்க', 'సేవ్ చేసిన ఫలితం చూడండి')}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* PAGE 3: CONSULTING DOCTOR AI */}
+              {activeTab === 'doctor_ai' && (
+                <div className="flex flex-col items-center max-w-4xl mx-auto w-full space-y-4">
+                  {/* Completed summary or live dialogue */}
+                  {isConsultationFinished ? (
+                    <div className="w-full max-w-2xl bg-white rounded-2xl sm:rounded-3xl border-2 sm:border-4 border-emerald-600 shadow-xl sm:shadow-2xl p-5 sm:p-8 text-center space-y-4 sm:space-y-6">
+                      <CheckCircle className="w-14 h-14 sm:w-20 sm:h-20 text-emerald-600 mx-auto" />
+                      <div>
+                        <h2 className="text-2xl sm:text-3xl font-black text-emerald-900">
+                          {t('Consultation Intake Completed!', 'परामर्श व पर्ची पूर्ण!', 'ஆலோசனை முடிந்தது!', 'సంప్రదింపు పూర్తయింది!')}
+                        </h2>
+                        <p className="text-slate-600 font-bold text-sm sm:text-base mt-1.5 sm:mt-2">
+                          {t('Your symptoms have been structured into clinical notes & FHIR bundle.', 'आपके लक्षणों का क्लिनिकल सारांश तैयार कर लिया गया है।', 'உங்கள் மருத்துவக் குறிப்புகள் தயாராக உள்ளன.', 'మీ లక్షణాలు క్లినికల్ నోట్స్‌గా మార్చబడ్డాయి.')}
+                        </p>
+                      </div>
+
+                      {sessionSummary && (
+                        <div className="bg-slate-50 border-2 border-slate-200 rounded-xl sm:rounded-2xl p-3 sm:p-4 text-left font-mono text-xs sm:text-sm text-slate-800 whitespace-pre-wrap max-h-60 overflow-y-auto">
+                          {sessionSummary}
+                        </div>
+                      )}
+
+                      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
+                        <button
+                          onClick={() => setActiveTab('medical_record')}
+                          className="h-12 sm:h-16 px-5 sm:px-6 bg-blue-900 hover:bg-blue-950 text-white font-black text-sm sm:text-lg rounded-xl sm:rounded-2xl shadow-lg flex items-center justify-center gap-2"
+                        >
+                          <FolderHeart className="w-5 h-5 sm:w-6 sm:h-6" />
+                          <span>{t('View in Medical Records', 'मेडिकल रिकॉर्ड में देखें', 'மருத்துவப் பதிவுகள்', 'మెడికల్ రికార్డులు')}</span>
+                        </button>
+                        <button
+                          onClick={handleRestart}
+                          className="h-12 sm:h-16 px-5 sm:px-6 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm sm:text-lg rounded-xl sm:rounded-2xl shadow-lg flex items-center justify-center gap-2"
+                        >
+                          <span>{t('New Patient Session', 'नया मरीज सत्र', 'புதிய அமர்வு', 'కొత్త సెషన్')}</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="w-full flex flex-col items-center">
+                      <AudioMic
+                        language={language}
+                        messages={messages}
+                        onSendMessage={submitMessageToChat}
+                        isProcessing={isProcessing}
+                      />
+                      
+                      <div className="mt-3 sm:mt-4 flex items-center justify-center w-full">
+                        <button
+                          onClick={triggerManualCompletion}
+                          className="h-12 sm:h-14 px-5 sm:px-7 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white text-sm sm:text-base font-extrabold rounded-xl sm:rounded-2xl shadow-md flex items-center justify-center gap-2 transition-all w-full sm:w-auto"
+                        >
+                          <Stethoscope className="w-4 h-4 sm:w-5 sm:h-5" />
+                          <span>{t('Finish & Generate Summary', 'परामर्श समाप्त करें व टोकन लें', 'முடித்து சுருக்கம் பெறுக', 'ముగించి సారాంశాన్ని పొందండి')}</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* PAGE 4: MEDICAL RECORD */}
+              {activeTab === 'medical_record' && (
+                <MedicalRecordsView
+                  patient={patient}
+                  ocrText={ocrText}
+                  scannedDetails={scannedDetails}
+                  onScanNewPrescription={() => {
+                    setScanSuccess(false)
+                    setActiveTab('scan_prescription')
+                  }}
+                  onConsultDoctor={() => setActiveTab('doctor_ai')}
+                />
+              )}
+
+              {/* PAGE 5: PREVIOUS VISITS TIMELINE */}
+              {activeTab === 'timeline' && (
+                <VisitsTimelineView
+                  patient={patient}
+                  currentSessionId={sessionId}
+                  currentSummary={sessionSummary}
+                  onNewConsultation={() => setActiveTab('doctor_ai')}
+                />
+              )}
+            </div>
+
+          </div>
+        ) : (
+          /* =========================================================================
+             PRE-LOGIN PHASES (Language Selection or Auth / Registration)
+             ========================================================================= */
+          <div className="w-full max-w-4xl mx-auto my-auto">
+            {/* PHASE 0: PREFERRED LANGUAGE SELECTION */}
+            {phase === 'language_select' && (
+              <LanguageSelector onLanguageSelected={handleLanguageSelected} />
+            )}
+
+            {/* PHASE 1: LOGIN / REGISTRATION */}
+            {phase === 'login' && (
+              <div className="w-full max-w-3xl mx-auto">
+                <div className="flex justify-end items-center mb-2 px-2">
+                  <button
+                    type="button"
+                    onClick={() => setPhase('language_select')}
+                    className="text-sm font-black text-blue-700 hover:text-blue-900 underline flex items-center gap-1.5"
+                  >
+                    <span>{t('Change Preferred Language', 'भाषा बदलें', 'மொழியை மாற்றவும்', 'భాషను మార్చండి')}</span>
+                  </button>
+                </div>
+                <AuthScreen
+                  language={language}
+                  setLanguage={setLanguage}
+                  onLoginSuccess={handleLoginSuccess}
+                />
+              </div>
+            )}
+          </div>
+        )}
       </main>
       <Footer />
     </div>

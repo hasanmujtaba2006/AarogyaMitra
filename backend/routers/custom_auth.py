@@ -311,6 +311,9 @@ def verify_login(payload: VerifyLoginRequest, db: Session = Depends(get_db)):
             "district": user.district or "District HQ",
             "state": user.state or "State",
             "pincode": user.pincode or "110001",
+            "blood_group": getattr(user, "blood_group", "B+") or "B+",
+            "allergies": getattr(user, "allergies", "No Known Allergies") or "No Known Allergies",
+            "profile_photo": getattr(user, "profile_photo", None),
             "auth_method": "MANUAL_OTP",
             "verification_status": "VERIFIED"
         }
@@ -404,6 +407,9 @@ def register_patient(payload: RegisterPatientRequest, db: Session = Depends(get_
             "district": user.district,
             "state": user.state,
             "address": user.address,
+            "blood_group": getattr(user, "blood_group", "B+") or "B+",
+            "allergies": getattr(user, "allergies", "No Known Allergies") or "No Known Allergies",
+            "profile_photo": getattr(user, "profile_photo", None),
             "auth_method": "MANUAL_REGISTER",
             "verification_status": "VERIFIED"
         }

@@ -144,18 +144,18 @@ export default function DoctorDashboard() {
     <div className="min-h-screen bg-slate-50 flex flex-col justify-between font-sans">
       <Header />
       
-      <main className="container mx-auto px-4 py-8 flex-1 max-w-7xl">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 text-center sm:text-left">
+      <main className="container mx-auto px-2.5 sm:px-4 py-4 sm:py-8 flex-1 max-w-7xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-5 sm:mb-8 text-center sm:text-left">
           <div className="flex items-center gap-3 justify-center sm:justify-start">
             <div className="p-2 bg-[#002F6C] text-white rounded-xl shadow-md">
-              <Stethoscope className="w-7 h-7" />
+              <Stethoscope className="w-6 h-6 sm:w-7 sm:h-7" />
             </div>
             <div>
-              <h1 className="text-2xl font-black text-slate-800">{t('OPD Clinical Dashboard', 'ओपीडी क्लिनिकल डैशबोर्ड', 'OPD மருத்துவ டேஷ்போர்டு', 'OPD క్లినికల్ డాష్‌బోర్డ్')}</h1>
+              <h1 className="text-xl sm:text-2xl font-black text-slate-800">{t('OPD Clinical Dashboard', 'ओपीडी क्लिनिकल डैशबोर्ड', 'OPD மருத்துவ டேஷ்போர்டு', 'OPD క్లినికల్ డాష్‌బోర్డ్')}</h1>
               <p className="text-xs text-slate-500">{t('AarogyaMitra Connected Practitioner Interface', 'आरोग्यमित्र कनेक्टेड डॉक्टर इंटरफेस', 'ஆரோக்கியமித்ரா இணைக்கப்பட்ட மருத்துவர் இடைமுகம்', 'ఆరోగ్యమిత్ర కనెక్ట్ చేయబడిన డాక్టర్ ఇంటర్‌ఫేస్')}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3 justify-center sm:justify-end flex-wrap">
+          <div className="flex items-center gap-2 sm:gap-3 justify-center sm:justify-end flex-wrap">
             <LanguageSwitcher variant="dashboard" />
             <button
               onClick={() => {
@@ -163,17 +163,17 @@ export default function DoctorDashboard() {
                 fetchSessions()
               }}
               disabled={isRefreshing}
-              className="flex items-center gap-2 px-4 py-2 border border-slate-200 bg-white hover:bg-slate-50 rounded-xl text-sm font-semibold text-slate-700 transition-colors shadow-sm w-fit mx-auto sm:mx-0"
+              className="flex items-center gap-2 px-3.5 sm:px-4 py-2 border border-slate-200 bg-white hover:bg-slate-50 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 transition-colors shadow-sm w-fit mx-auto sm:mx-0"
             >
-              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
               {t('Refresh Queue', 'कतार रीफ्रेश करें', 'வரிசையைப் புதுப்பிக்கவும்', 'క్యూని రిఫ్రెష్ చేయండి')}
             </button>
           </div>
         </div>
 
         {error && !selectedSession && (
-          <div className="mb-6 p-4 bg-red-50 text-red-800 border border-red-200 rounded-2xl flex items-start gap-3">
-            <AlertCircle className="w-6 h-6 shrink-0 text-red-600" />
+          <div className="mb-4 sm:mb-6 p-3.5 sm:p-4 bg-red-50 text-red-800 border border-red-200 rounded-2xl flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 shrink-0 text-red-600" />
             <div>
               <h4 className="font-bold text-sm">Dashboard Connection Error</h4>
               <p className="text-xs text-red-700/90 mt-0.5">{error}</p>
@@ -182,42 +182,42 @@ export default function DoctorDashboard() {
         )}
 
         {/* Mobile Responsive Tabs */}
-        <div className="flex lg:hidden mb-6 border border-slate-200 bg-white rounded-xl p-1 shadow-sm">
+        <div className="flex lg:hidden mb-4 sm:mb-6 border border-slate-200 bg-white rounded-xl p-1 shadow-sm">
           <button
             type="button"
             onClick={() => setMobileTab('queue')}
-            className={`flex-1 py-3 text-center font-bold text-sm rounded-lg transition-all flex items-center justify-center gap-2 ${
+            className={`flex-1 py-2.5 sm:py-3 text-center font-bold text-xs sm:text-sm rounded-lg transition-all flex items-center justify-center gap-1.5 sm:gap-2 ${
               mobileTab === 'queue'
                 ? 'bg-blue-50 text-[#002F6C] shadow-inner'
                 : 'text-slate-500 hover:text-slate-700'
             }`}
           >
-            <Users className="w-4 h-4" />
+            <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             <span>Patient Queue ({sessions.length})</span>
           </button>
           <button
             type="button"
             onClick={() => setMobileTab('consultation')}
-            className={`flex-1 py-3 text-center font-bold text-sm rounded-lg transition-all flex items-center justify-center gap-2 ${
+            className={`flex-1 py-2.5 sm:py-3 text-center font-bold text-xs sm:text-sm rounded-lg transition-all flex items-center justify-center gap-1.5 sm:gap-2 ${
               mobileTab === 'consultation'
                 ? 'bg-blue-50 text-[#002F6C] shadow-inner'
                 : 'text-slate-500 hover:text-slate-700'
             }`}
           >
-            <User className="w-4 h-4" />
+            <User className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             <span>Consultation {selectedSession ? `(${selectedSession.patient_name.split(' ')[0]})` : ''}</span>
           </button>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch min-h-[600px]">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-8 items-stretch min-h-[500px] sm:min-h-[600px]">
           {/* Left panel: Sessions list queue */}
-          <div className={`lg:col-span-4 bg-white rounded-3xl border border-slate-100 shadow-sm flex-col overflow-hidden ${
+          <div className={`lg:col-span-4 bg-white rounded-2xl sm:rounded-3xl border border-slate-100 shadow-sm flex-col overflow-hidden ${
             mobileTab === 'queue' ? 'flex' : 'hidden lg:flex'
           }`}>
-            <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+            <div className="p-4 sm:p-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-slate-500" />
-                <h3 className="font-extrabold text-slate-800 text-base">Patient Queue</h3>
+                <Users className="w-4 h-4 sm:w-5 sm:h-5 text-slate-500" />
+                <h3 className="font-extrabold text-slate-800 text-sm sm:text-base">Patient Queue</h3>
               </div>
               <span className="bg-slate-200 text-slate-700 px-2 py-0.5 rounded-full text-xs font-bold">
                 {sessions.length} Active
@@ -265,14 +265,14 @@ export default function DoctorDashboard() {
           </div>
 
           {/* Right panel: Active session details and clinical entry */}
-          <div className={`lg:col-span-8 bg-white rounded-3xl border border-slate-100 shadow-sm p-6 flex-col ${
+          <div className={`lg:col-span-8 bg-white rounded-2xl sm:rounded-3xl border border-slate-100 shadow-sm p-4 sm:p-6 flex-col ${
             mobileTab === 'consultation' ? 'flex' : 'hidden lg:flex'
           }`}>
             {selectedSession ? (
               <div className="flex-1 flex flex-col justify-between">
                 <div>
                   {/* Patient mini card */}
-                  <div className="bg-slate-50 rounded-2xl border border-slate-100 p-5 mb-6 flex flex-wrap justify-between items-center gap-4">
+                  <div className="bg-slate-50 rounded-xl sm:rounded-2xl border border-slate-100 p-3.5 sm:p-5 mb-4 sm:mb-6 flex flex-wrap justify-between items-center gap-3 sm:gap-4">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 bg-[#002F6C]/10 rounded-2xl flex items-center justify-center text-[#002F6C] font-black text-lg">
                         {selectedSession.patient_name[0]}
@@ -423,8 +423,8 @@ export default function DoctorDashboard() {
 
         {/* ABHA Card Inspection Modal for Doctor */}
         {showAbhaModal && selectedSession && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl relative border-2 border-slate-100 max-h-[90vh] overflow-y-auto">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
+            <div className="bg-white rounded-2xl sm:rounded-3xl max-w-xl w-full p-4 sm:p-6 shadow-2xl relative border border-slate-100 max-h-[90vh] overflow-y-auto">
               <button
                 type="button"
                 onClick={() => setShowAbhaModal(false)}

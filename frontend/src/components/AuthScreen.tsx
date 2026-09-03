@@ -347,6 +347,28 @@ export default function AuthScreen({
     }
   }
 
+  const handleQuickLoginHasan = () => {
+    const hasanData: PatientInfo = {
+      id: 'demo_hasan',
+      abha_number: '91-8841-9204-7210',
+      abha_address: 'hasan.m@abdm',
+      full_name: 'Hasan Mujtaba',
+      gender: 'M',
+      date_of_birth: '2007-05-14',
+      age: 19,
+      mobile_number: '+919876543210',
+      address: 'Mathurapur, Bareilly',
+      district: 'Bareilly',
+      state: 'Uttar Pradesh',
+      pincode: '243001',
+      blood_group: 'B+',
+      allergies: 'No Known Allergies',
+      auth_method: 'AADHAAR_OTP',
+      verification_status: 'VERIFIED'
+    }
+    onLoginSuccess(hasanData)
+  }
+
   const handleVerifyLogin = async () => {
     setErrorMessage('')
     setSuccessMessage('')
@@ -414,10 +436,15 @@ export default function AuthScreen({
           full_name: p.full_name || `Patient ${cleanNumber.slice(-4)}`,
           gender: p.gender || 'M',
           date_of_birth: p.date_of_birth || '1990-01-01',
+          age: p.age,
           mobile_number: p.mobile_number || cleanNumber,
+          address: p.address,
           district: p.district || district,
           state: p.state || stateName,
           pincode: p.pincode || pinCode,
+          blood_group: p.blood_group || 'B+',
+          allergies: p.allergies || 'No Known Allergies',
+          profile_photo: p.profile_photo || '',
           auth_method: 'MANUAL_OTP',
           verification_status: 'VERIFIED'
         }
@@ -495,10 +522,15 @@ export default function AuthScreen({
         full_name: p.full_name || fullName.trim(),
         gender: p.gender || gender,
         date_of_birth: p.date_of_birth || `${new Date().getFullYear() - parsedAge}-01-01`,
+        age: parsedAge,
         mobile_number: p.mobile_number || cleanNumber,
+        address: p.address,
         district: p.district || district,
         state: p.state || stateName,
         pincode: p.pin_code || cleanPin,
+        blood_group: p.blood_group || 'B+',
+        allergies: p.allergies || 'No Known Allergies',
+        profile_photo: p.profile_photo || '',
         auth_method: 'MANUAL_REGISTER',
         verification_status: 'VERIFIED'
       }
@@ -512,29 +544,29 @@ export default function AuthScreen({
   }
 
   return (
-    <div className="w-full max-w-3xl mx-auto bg-white rounded-3xl border-4 border-slate-900 shadow-2xl p-6 sm:p-10 my-4 text-slate-900">
+    <div className="w-full max-w-3xl mx-auto bg-white rounded-2xl sm:rounded-3xl border-2 sm:border-4 border-slate-900 shadow-xl sm:shadow-2xl p-4 sm:p-8 md:p-10 my-2 sm:my-4 text-slate-900">
       {/* Invisible reCAPTCHA container for Firebase Phone Authentication */}
       <div id="auth-recaptcha-container"></div>
 
       {/* Top Header with Kiosk Accessibility Badge */}
-      <div className="text-center mb-8">
-        <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-emerald-100 border-2 border-emerald-500 text-emerald-800 text-base font-extrabold tracking-wide mb-4">
-          <ShieldCheck className="w-6 h-6 text-emerald-600" />
+      <div className="text-center mb-5 sm:mb-8">
+        <div className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-1.5 sm:py-2 rounded-full bg-emerald-100 border-2 border-emerald-500 text-emerald-800 text-xs sm:text-base font-extrabold tracking-wide mb-3 sm:mb-4">
+          <ShieldCheck className="w-4 h-4 sm:w-6 sm:h-6 text-emerald-600 shrink-0" />
           <span>{t('AAROGYAMITRA HEALTHCARE KIOSK', 'आरोग्यमित्र स्वास्थ्य कियोस्क', 'ஆரோக்கியமித்ரா சுகாதார கியோஸ்க்', 'ఆరోగ్యమిత్ర హెల్త్‌కేర్ కియోస్క్')}</span>
         </div>
 
-        <h1 className="text-4xl sm:text-5xl font-black text-slate-900 tracking-tight">
+        <h1 className="text-2xl sm:text-4xl md:text-5xl font-black text-slate-900 tracking-tight leading-tight">
           {authMode === 'login' 
             ? t('Patient Login', 'रोगी लॉग इन', 'நோயாளி உள்நுழைவு', 'రోగి లాగిన్') 
             : t('New Patient Registration', 'नया रोगी पंजीकरण', 'புதிய நோயாளி பதிவு', 'కొత్త రోగి నమోదు')}
         </h1>
-        <p className="text-xl sm:text-2xl text-slate-600 font-bold mt-2">
+        <p className="text-sm sm:text-xl md:text-2xl text-slate-600 font-bold mt-1.5 sm:mt-2">
           {t('Touch the large buttons below to proceed', 'आगे बढ़ने के लिए नीचे बड़े बटनों को स्पर्श करें', 'தொடர கீழே உள்ள பெரிய பொத்தான்களைத் தொடவும்', 'కొనసాగడానికి క్రింది పెద్ద బటన్లను నొక్కండి')}
         </p>
       </div>
 
-      {/* High-Contrast Mode Toggle Switch (Massive Touch Targets) */}
-      <div className="grid grid-cols-2 gap-4 p-2 bg-slate-100 rounded-3xl border-4 border-slate-300 mb-8">
+      {/* High-Contrast Mode Toggle Switch */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4 p-1.5 sm:p-2 bg-slate-100 rounded-2xl sm:rounded-3xl border-2 sm:border-4 border-slate-300 mb-6 sm:mb-8">
         <button
           type="button"
           onClick={() => {
@@ -542,14 +574,14 @@ export default function AuthScreen({
             setErrorMessage('')
             setSuccessMessage('')
           }}
-          className={`py-5 px-4 rounded-2xl text-2xl font-black transition-all flex items-center justify-center gap-3 active:scale-95 ${
+          className={`py-3 sm:py-4 px-3 sm:px-4 rounded-xl sm:rounded-2xl text-sm sm:text-lg md:text-xl font-black transition-all flex items-center justify-center gap-2 sm:gap-3 active:scale-95 ${
             authMode === 'login'
-              ? 'bg-blue-700 text-white shadow-xl scale-[1.02] border-2 border-blue-900'
+              ? 'bg-blue-700 text-white shadow-xl scale-[1.01] sm:scale-[1.02] border-2 border-blue-900'
               : 'bg-transparent text-slate-700 hover:text-slate-900 hover:bg-slate-200'
           }`}
         >
-          <Phone className="w-7 h-7 shrink-0" />
-          <span>{t('Returning Patient (Login)', 'पुराना रोगी (लॉग इन)', 'பழைய நோயாளி (உள்நுழைவு)', 'పాత రోగి (లాగిన్)')}</span>
+          <Phone className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" />
+          <span className="truncate">{t('Returning Patient (Login)', 'पुराना रोगी (लॉग इन)', 'பழைய நோயாளி (உள்நுழைவு)', 'పాత రోగి (లాగిన్)')}</span>
         </button>
 
         <button
@@ -559,33 +591,33 @@ export default function AuthScreen({
             setErrorMessage('')
             setSuccessMessage('')
           }}
-          className={`py-5 px-4 rounded-2xl text-2xl font-black transition-all flex items-center justify-center gap-3 active:scale-95 ${
+          className={`py-3 sm:py-4 px-3 sm:px-4 rounded-xl sm:rounded-2xl text-sm sm:text-lg md:text-xl font-black transition-all flex items-center justify-center gap-2 sm:gap-3 active:scale-95 ${
             authMode === 'register'
-              ? 'bg-emerald-700 text-white shadow-xl scale-[1.02] border-2 border-emerald-900'
+              ? 'bg-emerald-700 text-white shadow-xl scale-[1.01] sm:scale-[1.02] border-2 border-emerald-900'
               : 'bg-transparent text-slate-700 hover:text-slate-900 hover:bg-slate-200'
           }`}
         >
-          <User className="w-7 h-7 shrink-0" />
-          <span>{t('New Patient (Register)', 'नया रोगी (पंजीकरण)', 'புதிய நோயாளி (பதிவு)', 'కొత్త రోగి (నమోదు)')}</span>
+          <User className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" />
+          <span className="truncate">{t('New Patient (Register)', 'नया रोगी (पंजीकरण)', 'புதிய நோயாளி (பதிவு)', 'కొత్త రోగి (నమోదు)')}</span>
         </button>
       </div>
 
       {/* Global Error Banner */}
       {errorMessage && (
-        <div className="mb-6 p-6 bg-red-50 border-4 border-red-500 rounded-2xl flex items-start gap-4 animate-shake shadow-md">
-          <AlertCircle className="w-8 h-8 text-red-600 shrink-0 mt-0.5" />
+        <div className="mb-5 sm:mb-6 p-4 sm:p-6 bg-red-50 border-2 sm:border-4 border-red-500 rounded-xl sm:rounded-2xl flex items-start gap-3 sm:gap-4 animate-shake shadow-md">
+          <AlertCircle className="w-6 h-6 sm:w-8 sm:h-8 text-red-600 shrink-0 mt-0.5" />
           <div className="w-full">
-            <h4 className="text-xl font-black text-red-900">{t('Attention Needed', 'कृपया ध्यान दें')}</h4>
-            <p className="text-xl font-bold text-red-700 mt-1">{errorMessage}</p>
+            <h4 className="text-base sm:text-xl font-black text-red-900">{t('Attention Needed', 'कृपया ध्यान दें')}</h4>
+            <p className="text-sm sm:text-lg font-bold text-red-700 mt-1">{errorMessage}</p>
 
             {billingError && (
-              <div className="mt-4 pt-4 border-t-2 border-red-200">
+              <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t-2 border-red-200">
                 <button
                   type="button"
                   onClick={handleUseLocalOtp}
-                  className="px-6 py-3 rounded-xl bg-slate-900 hover:bg-black text-white font-extrabold text-lg flex items-center gap-2 shadow-lg transition-all active:scale-95"
+                  className="px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl bg-slate-900 hover:bg-black text-white font-extrabold text-sm sm:text-lg flex items-center gap-2 shadow-lg transition-all active:scale-95"
                 >
-                  <Sparkles className="w-5 h-5 text-amber-400" />
+                  <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400 shrink-0" />
                   <span>{t('Continue with Kiosk OTP (Instant Demo Mode)', 'कियोस्क ओटीपी के साथ जारी रखें (डेमो मोड)')}</span>
                 </button>
               </div>
@@ -598,16 +630,16 @@ export default function AuthScreen({
       {/* 1. RETURNING PATIENT LOGIN FLOW                                      */}
       {/* =================================================================== */}
       {authMode === 'login' && (
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           {loginStep === 'phone' ? (
             /* Step 1: Mobile Number Input */
-            <div className="space-y-6">
+            <div className="space-y-4 sm:space-y-6">
               <div>
-                <label className="block text-2xl font-extrabold text-slate-800 mb-3">
+                <label className="block text-base sm:text-xl md:text-2xl font-extrabold text-slate-800 mb-1.5 sm:mb-3">
                   {t('Enter 10-Digit Mobile Number', '10 अंकों का मोबाइल नंबर दर्ज करें', '10 இலக்க மொபைல் எண்ணை உள்ளிடவும்', '10 అంకెల మొబైల్ నంబర్‌ను నమోదు చేయండి')}
                 </label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none text-2xl font-black text-slate-400">
+                  <div className="absolute inset-y-0 left-0 pl-4 sm:pl-6 flex items-center pointer-events-none text-lg sm:text-2xl font-black text-slate-400">
                     +91
                   </div>
                   <input
@@ -617,41 +649,53 @@ export default function AuthScreen({
                     value={loginMobile}
                     onChange={(e) => setLoginMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
                     placeholder="9876543210"
-                    className="w-full pl-24 pr-6 py-6 text-3xl font-black tracking-wider text-slate-900 bg-white border-4 border-slate-400 rounded-2xl focus:border-blue-600 focus:ring-4 focus:ring-blue-200 outline-none shadow-inner"
+                    className="w-full pl-16 sm:pl-24 pr-4 sm:pr-6 py-3.5 sm:py-5 text-xl sm:text-3xl font-black tracking-wider text-slate-900 bg-white border-2 sm:border-4 border-slate-400 rounded-xl sm:rounded-2xl focus:border-blue-600 focus:ring-2 sm:focus:ring-4 focus:ring-blue-200 outline-none shadow-inner"
                   />
                 </div>
-                <p className="text-lg text-slate-500 font-bold mt-2">
+                <p className="text-xs sm:text-base text-slate-500 font-bold mt-1.5 sm:mt-2">
                   {t('We will send an OTP via SMS to verify your mobile number.', 'हम आपके नंबर पर एसएमएस द्वारा ओटीपी भेजेंगे।', 'உங்கள் எண்ணை சரிபார்க்க SMS மூலம் OTP அனுப்புவோம்.', 'మీ మొబైల్ నంబర్‌ను ధృవీకరించడానికి మేము SMS ద్వారా OTPని పంపుతాము.')}
                 </p>
               </div>
 
-              {/* Massive "Get OTP" Button */}
+              {/* Action "Get OTP" Button */}
               <button
                 type="button"
                 onClick={handleSendOtp}
                 disabled={isSendingOtp || loginMobile.length !== 10}
-                className="w-full py-6 px-8 text-2xl rounded-2xl font-black text-white bg-blue-600 hover:bg-blue-700 active:scale-95 disabled:bg-slate-300 disabled:cursor-not-allowed transition-all shadow-xl flex items-center justify-center gap-4"
+                className="w-full py-3.5 sm:py-5 px-4 sm:px-8 text-base sm:text-2xl rounded-xl sm:rounded-2xl font-black text-white bg-blue-600 hover:bg-blue-700 active:scale-95 disabled:bg-slate-300 disabled:cursor-not-allowed transition-all shadow-xl flex items-center justify-center gap-2.5 sm:gap-4"
               >
                 {isSendingOtp ? (
                   <>
-                    <RefreshCw className="w-8 h-8 animate-spin" />
+                    <RefreshCw className="w-5 h-5 sm:w-7 sm:h-7 animate-spin" />
                     <span>{t('Sending OTP via SMS...', 'ओटीपी भेजा जा रहा है...', 'SMS மூலம் OTP அனுப்பப்படுகிறது...', 'SMS ద్వారా OTP పంపబడుతోంది...')}</span>
                   </>
                 ) : (
                   <>
                     <span>{t('Get OTP', 'ओटीपी प्राप्त करें', 'OTP பெறுக', 'OTP పొందండి')}</span>
-                    <ArrowRight className="w-8 h-8" />
+                    <ArrowRight className="w-5 h-5 sm:w-7 sm:h-7" />
                   </>
                 )}
               </button>
+
+              {/* 1-Click Quick Demo Login: Hasan Mujtaba */}
+              <div className="pt-1 sm:pt-2">
+                <button
+                  type="button"
+                  onClick={handleQuickLoginHasan}
+                  className="w-full py-3 sm:py-4 px-4 sm:px-6 rounded-xl sm:rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 hover:from-black hover:to-slate-900 border-2 border-slate-700 text-white font-black text-xs sm:text-base md:text-lg flex items-center justify-center gap-2 sm:gap-3 shadow-lg transition-all active:scale-95"
+                >
+                  <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400 shrink-0" />
+                  <span className="truncate">{t('1-Click Demo Login: Hasan Mujtaba (19 Yrs, B+)', 'त्वरित डेमो: हसन मुजतबा (19 वर्ष, बी+)')}</span>
+                </button>
+              </div>
             </div>
           ) : (
             /* Step 2: 6-Digit OTP Verification */
-            <div className="space-y-6">
-              <div className="flex items-center justify-between bg-blue-50 border-2 border-blue-300 rounded-2xl p-4">
-                <div className="flex items-center gap-3">
-                  <Phone className="w-6 h-6 text-blue-700" />
-                  <span className="text-xl font-extrabold text-blue-950">
+            <div className="space-y-4 sm:space-y-6">
+              <div className="flex items-center justify-between bg-blue-50 border-2 border-blue-300 rounded-xl sm:rounded-2xl p-3 sm:p-4">
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <Phone className="w-5 h-5 sm:w-6 sm:h-6 text-blue-700 shrink-0" />
+                  <span className="text-base sm:text-xl font-extrabold text-blue-950 font-mono">
                     +91 {loginMobile}
                   </span>
                 </div>
@@ -662,15 +706,15 @@ export default function AuthScreen({
                     setLoginOtp('')
                     setErrorMessage('')
                   }}
-                  className="text-lg font-black text-blue-700 underline hover:text-blue-900 flex items-center gap-1"
+                  className="text-xs sm:text-base font-black text-blue-700 underline hover:text-blue-900 flex items-center gap-1"
                 >
-                  <ArrowLeft className="w-5 h-5" />
+                  <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
                   <span>{t('Change Number', 'नंबर बदलें', 'எண்ணை மாற்றவும்', 'నంబరు మార్చండి')}</span>
                 </button>
               </div>
 
               <div>
-                <label className="block text-2xl font-extrabold text-slate-800 mb-3">
+                <label className="block text-base sm:text-xl md:text-2xl font-extrabold text-slate-800 mb-1.5 sm:mb-3">
                   {t('Enter 6-Digit OTP', '6 अंकों का ओटीपी दर्ज करें', '6 இலக்க OTP ஐ உள்ளிடவும்', '6 అంకెల OTP ని నమోదు చేయండి')}
                 </label>
                 <input
@@ -680,43 +724,43 @@ export default function AuthScreen({
                   value={loginOtp}
                   onChange={(e) => setLoginOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   placeholder="------"
-                  className="w-full py-6 px-6 text-4xl font-black text-center tracking-[0.5em] text-blue-950 bg-white border-4 border-blue-600 rounded-2xl focus:ring-4 focus:ring-blue-200 outline-none shadow-inner"
+                  className="w-full py-3.5 sm:py-5 px-3 sm:px-6 text-2xl sm:text-4xl font-black text-center tracking-[0.3em] sm:tracking-[0.5em] text-blue-950 bg-white border-2 sm:border-4 border-blue-600 rounded-xl sm:rounded-2xl focus:ring-2 sm:focus:ring-4 focus:ring-blue-200 outline-none shadow-inner"
                 />
 
                 {/* Resend OTP countdown */}
-                <div className="mt-4 flex items-center justify-end">
+                <div className="mt-2.5 sm:mt-4 flex items-center justify-end">
                   {resendTimer > 0 ? (
-                    <span className="text-lg font-bold text-slate-500">
+                    <span className="text-xs sm:text-base font-bold text-slate-500">
                       {t(`Resend in ${resendTimer}s`, `${resendTimer}s में पुनः भेजें`, `${resendTimer} வினாடிகளில் மீண்டும் அனுப்பவும்`, `${resendTimer} సెకన్లలో మళ్లీ పంపండి`)}
                     </span>
                   ) : (
                     <button
                       type="button"
                       onClick={handleSendOtp}
-                      className="text-lg font-black text-blue-700 underline hover:text-blue-900 flex items-center gap-1.5"
+                      className="text-xs sm:text-base font-black text-blue-700 underline hover:text-blue-900 flex items-center gap-1.5"
                     >
-                      <RefreshCw className="w-5 h-5" />
+                      <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5" />
                       <span>{t('Resend OTP', 'ओटीपी पुनः भेजें', 'OTP மீண்டும் அனுப்பவும்', 'OTP మళ్లీ పంపండి')}</span>
                     </button>
                   )}
                 </div>
               </div>
 
-              {/* Massive "Verify & Proceed" Button */}
+              {/* Action "Verify & Proceed" Button */}
               <button
                 type="button"
                 onClick={handleVerifyLogin}
                 disabled={isVerifyingOtp || loginOtp.length !== 6}
-                className="w-full py-6 px-8 text-2xl rounded-2xl font-black text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:bg-slate-300 disabled:cursor-not-allowed transition-all shadow-xl flex items-center justify-center gap-4"
+                className="w-full py-3.5 sm:py-5 px-4 sm:px-8 text-base sm:text-2xl rounded-xl sm:rounded-2xl font-black text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:bg-slate-300 disabled:cursor-not-allowed transition-all shadow-xl flex items-center justify-center gap-2.5 sm:gap-4"
               >
                 {isVerifyingOtp ? (
                   <>
-                    <RefreshCw className="w-8 h-8 animate-spin" />
+                    <RefreshCw className="w-5 h-5 sm:w-7 sm:h-7 animate-spin" />
                     <span>{t('Verifying OTP...', 'ओटीपी सत्यापित हो रहा है...', 'OTP சரிபார்க்கப்படுகிறது...', 'OTP ధృవీకరించబడుతోంది...')}</span>
                   </>
                 ) : (
                   <>
-                    <ShieldCheck className="w-8 h-8" />
+                    <ShieldCheck className="w-5 h-5 sm:w-7 sm:h-7" />
                     <span>{t('Verify & Start Consultation', 'सत्यापित करें और परामर्श शुरू करें', 'சரிபார்த்து ஆலோசனையைத் தொடங்கவும்', 'ధృవీకరించి సంప్రదింపులను ప్రారంభించండి')}</span>
                   </>
                 )}
@@ -730,10 +774,10 @@ export default function AuthScreen({
       {/* 2. NEW PATIENT REGISTRATION FLOW                                    */}
       {/* =================================================================== */}
       {authMode === 'register' && (
-        <form onSubmit={handleRegister} className="space-y-6">
+        <form onSubmit={handleRegister} className="space-y-4 sm:space-y-6">
           {/* 1. Full Name */}
           <div>
-            <label className="block text-2xl font-extrabold text-slate-800 mb-2">
+            <label className="block text-sm sm:text-lg md:text-xl font-extrabold text-slate-800 mb-1 sm:mb-2">
               {t('1. Full Name', '1. पूरा नाम', '1. முழுப் பெயர்', '1. పూర్తి పేరు')} <span className="text-red-500">*</span>
             </label>
             <input
@@ -742,17 +786,17 @@ export default function AuthScreen({
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               placeholder={t('e.g. Ramesh Patel', 'उदा. रमेश पटेल', 'எ.கா. ரமேஷ் பட்டேல்', 'ఉదా. రమేష్ పటేల్')}
-              className="w-full p-6 text-2xl font-bold text-slate-900 bg-white border-4 border-slate-300 rounded-2xl focus:border-blue-600 focus:ring-4 focus:ring-blue-100 outline-none shadow-inner"
+              className="w-full p-3 sm:p-4 text-base sm:text-xl font-bold text-slate-900 bg-white border-2 sm:border-4 border-slate-300 rounded-xl sm:rounded-2xl focus:border-blue-600 focus:ring-2 sm:focus:ring-4 focus:ring-blue-100 outline-none shadow-inner"
             />
           </div>
 
           {/* 2. Mobile Number */}
           <div>
-            <label className="block text-2xl font-extrabold text-slate-800 mb-2">
+            <label className="block text-sm sm:text-lg md:text-xl font-extrabold text-slate-800 mb-1 sm:mb-2">
               {t('2. Mobile Number (10 Digits)', '2. मोबाइल नंबर (10 अंक)', '2. மொபைல் எண் (10 இலக்கங்கள்)', '2. మొబైల్ నంబర్ (10 అంకెలు)')} <span className="text-red-500">*</span>
             </label>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none text-2xl font-black text-slate-400">
+              <div className="absolute inset-y-0 left-0 pl-4 sm:pl-6 flex items-center pointer-events-none text-base sm:text-xl font-black text-slate-400">
                 +91
               </div>
               <input
@@ -763,61 +807,61 @@ export default function AuthScreen({
                 value={regMobile}
                 onChange={(e) => setRegMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
                 placeholder="9876543210"
-                className="w-full pl-24 pr-6 py-6 text-2xl font-bold tracking-wider text-slate-900 bg-white border-4 border-slate-300 rounded-2xl focus:border-blue-600 focus:ring-4 focus:ring-blue-100 outline-none shadow-inner"
+                className="w-full pl-16 sm:pl-20 pr-4 sm:pr-6 py-3 sm:py-4 text-base sm:text-xl font-bold tracking-wider text-slate-900 bg-white border-2 sm:border-4 border-slate-300 rounded-xl sm:rounded-2xl focus:border-blue-600 focus:ring-2 sm:focus:ring-4 focus:ring-blue-100 outline-none shadow-inner"
               />
             </div>
           </div>
 
-          {/* 3. Gender (Massive Tap Buttons - NO Dropdown) */}
+          {/* 3. Gender */}
           <div>
-            <label className="block text-2xl font-extrabold text-slate-800 mb-2">
+            <label className="block text-sm sm:text-lg md:text-xl font-extrabold text-slate-800 mb-1 sm:mb-2">
               {t('3. Gender', '3. लिंग', '3. பாலினம்', '3. లింగం')} <span className="text-red-500">*</span>
             </label>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-3 gap-2 sm:gap-4">
               <button
                 type="button"
                 onClick={() => setGender('M')}
-                className={`py-5 px-3 text-2xl font-black rounded-2xl border-4 transition-all flex flex-col items-center justify-center gap-1 active:scale-95 ${
+                className={`py-2.5 sm:py-4 px-2 text-sm sm:text-xl font-black rounded-xl sm:rounded-2xl border-2 sm:border-4 transition-all flex flex-col items-center justify-center gap-0.5 sm:gap-1 active:scale-95 ${
                   gender === 'M'
-                    ? 'bg-blue-700 text-white border-blue-950 shadow-xl scale-[1.02]'
+                    ? 'bg-blue-700 text-white border-blue-950 shadow-lg sm:shadow-xl scale-[1.01] sm:scale-[1.02]'
                     : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
                 }`}
               >
                 <span>{t('Male', 'पुरुष', 'ஆண்', 'పురుషుడు')}</span>
-                <span className="text-sm font-bold opacity-80">(M)</span>
+                <span className="text-[10px] sm:text-xs font-bold opacity-80">(M)</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setGender('F')}
-                className={`py-5 px-3 text-2xl font-black rounded-2xl border-4 transition-all flex flex-col items-center justify-center gap-1 active:scale-95 ${
+                className={`py-2.5 sm:py-4 px-2 text-sm sm:text-xl font-black rounded-xl sm:rounded-2xl border-2 sm:border-4 transition-all flex flex-col items-center justify-center gap-0.5 sm:gap-1 active:scale-95 ${
                   gender === 'F'
-                    ? 'bg-rose-700 text-white border-rose-950 shadow-xl scale-[1.02]'
+                    ? 'bg-rose-700 text-white border-rose-950 shadow-lg sm:shadow-xl scale-[1.01] sm:scale-[1.02]'
                     : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
                 }`}
               >
                 <span>{t('Female', 'महिला', 'பெண்', 'స్త్రీ')}</span>
-                <span className="text-sm font-bold opacity-80">(F)</span>
+                <span className="text-[10px] sm:text-xs font-bold opacity-80">(F)</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setGender('O')}
-                className={`py-5 px-3 text-2xl font-black rounded-2xl border-4 transition-all flex flex-col items-center justify-center gap-1 active:scale-95 ${
+                className={`py-2.5 sm:py-4 px-2 text-sm sm:text-xl font-black rounded-xl sm:rounded-2xl border-2 sm:border-4 transition-all flex flex-col items-center justify-center gap-0.5 sm:gap-1 active:scale-95 ${
                   gender === 'O'
-                    ? 'bg-purple-700 text-white border-purple-950 shadow-xl scale-[1.02]'
+                    ? 'bg-purple-700 text-white border-purple-950 shadow-lg sm:shadow-xl scale-[1.01] sm:scale-[1.02]'
                     : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
                 }`}
               >
                 <span>{t('Other', 'अन्य', 'மற்றவை', 'ఇతర')}</span>
-                <span className="text-sm font-bold opacity-80">(O)</span>
+                <span className="text-[10px] sm:text-xs font-bold opacity-80">(O)</span>
               </button>
             </div>
           </div>
 
           {/* 4. Age */}
           <div>
-            <label className="block text-2xl font-extrabold text-slate-800 mb-2">
+            <label className="block text-sm sm:text-lg md:text-xl font-extrabold text-slate-800 mb-1 sm:mb-2">
               {t('4. Age (Years)', '4. आयु (वर्ष)', '4. வயது (ஆண்டுகள்)', '4. వయస్సు (సంవత్సరాలు)')} <span className="text-red-500">*</span>
             </label>
             <input
@@ -828,27 +872,27 @@ export default function AuthScreen({
               value={age}
               onChange={(e) => setAge(e.target.value)}
               placeholder="e.g. 42"
-              className="w-full p-6 text-2xl font-bold text-slate-900 bg-white border-4 border-slate-300 rounded-2xl focus:border-blue-600 focus:ring-4 focus:ring-blue-100 outline-none shadow-inner"
+              className="w-full p-3 sm:p-4 text-base sm:text-xl font-bold text-slate-900 bg-white border-2 sm:border-4 border-slate-300 rounded-xl sm:rounded-2xl focus:border-blue-600 focus:ring-2 sm:focus:ring-4 focus:ring-blue-100 outline-none shadow-inner"
             />
           </div>
 
           {/* 5. PIN Code (The Magic Feature) */}
-          <div className="bg-blue-50 border-4 border-blue-200 rounded-3xl p-6 space-y-4">
+          <div className="bg-blue-50 border-2 sm:border-4 border-blue-200 rounded-2xl sm:rounded-3xl p-3.5 sm:p-6 space-y-3 sm:space-y-4">
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-2xl font-extrabold text-blue-950 flex items-center gap-2">
-                  <MapPin className="w-7 h-7 text-blue-700" />
+              <div className="flex items-center justify-between mb-1.5 sm:mb-2 flex-wrap gap-1">
+                <label className="text-sm sm:text-lg md:text-xl font-extrabold text-blue-950 flex items-center gap-1.5 sm:gap-2">
+                  <MapPin className="w-5 h-5 sm:w-6 sm:h-6 text-blue-700 shrink-0" />
                   <span>{t('5. PIN Code', '5. पिन कोड', '5. அஞ்சல் குறியீடு', '5. పిన్ కోడ్')} <span className="text-red-500">*</span></span>
                 </label>
                 {pinLoading && (
-                  <span className="text-base font-black text-blue-700 flex items-center gap-1.5 animate-pulse">
-                    <RefreshCw className="w-5 h-5 animate-spin" />
+                  <span className="text-xs sm:text-sm font-black text-blue-700 flex items-center gap-1 animate-pulse">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                     <span>{t('Finding District & State...', 'स्थान खोज रहे हैं...', 'இடம் தேடப்படுகிறது...', 'స్థలాన్ని శోధిస్తోంది...')}</span>
                   </span>
                 )}
                 {pinResolved && (
-                  <span className="text-base font-black text-emerald-800 bg-emerald-100 border border-emerald-400 px-3 py-1 rounded-full flex items-center gap-1">
-                    <Check className="w-4 h-4 text-emerald-600" />
+                  <span className="text-xs sm:text-sm font-black text-emerald-800 bg-emerald-100 border border-emerald-400 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
                     <span>{t('Postal Auto-Resolved', 'पिन कोड सत्यापित', 'அஞ்சல் குறியீடு சரிபார்க்கப்பட்டது', 'పిన్ కోడ్ ధృవీకరించబడింది')}</span>
                   </span>
                 )}
@@ -862,20 +906,20 @@ export default function AuthScreen({
                 value={pinCode}
                 onChange={(e) => setPinCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                 placeholder="226001"
-                className="w-full p-6 text-3xl font-black tracking-widest text-slate-900 bg-white border-4 border-blue-400 rounded-2xl focus:border-blue-700 focus:ring-4 focus:ring-blue-200 outline-none shadow-inner"
+                className="w-full p-3 sm:p-4 text-xl sm:text-2xl font-black tracking-widest text-slate-900 bg-white border-2 sm:border-4 border-blue-400 rounded-xl sm:rounded-2xl focus:border-blue-700 focus:ring-2 sm:focus:ring-4 focus:ring-blue-200 outline-none shadow-inner"
               />
-              <p className="text-base font-bold text-blue-800 mt-2">
+              <p className="text-xs sm:text-sm font-bold text-blue-800 mt-1.5">
                 {t('Type exactly 6 digits to automatically fill District and State.', 'जिला और राज्य अपने आप भरने के लिए 6 अंक टाइप करें।', 'மாவட்டம் மற்றும் மாநிலத்தை நிரப்ப சரியாக 6 இலக்கங்களை தட்டச்சு செய்யவும்.', 'జిల్లా మరియు రాష్ట్రాన్ని పూరించడానికి సరిగ్గా 6 అంకెలను టైప్ చేయండి.')}
               </p>
               {pinError && (
-                <p className="text-base font-black text-red-600 mt-1">{pinError}</p>
+                <p className="text-xs sm:text-sm font-black text-red-600 mt-1">{pinError}</p>
               )}
             </div>
 
             {/* Read-Only District & State Inputs */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-4 pt-1">
               <div>
-                <label className="block text-xl font-extrabold text-slate-700 mb-1">
+                <label className="block text-xs sm:text-sm font-extrabold text-slate-700 mb-1">
                   {t('District (Auto-filled)', 'जिला (स्वतः भरा गया)', 'மாவட்டம் (தானாக நிரப்பப்பட்டது)', 'జిల్లా (స్వయంచాలకంగా పూరించబడింది)')}
                 </label>
                 <input
@@ -883,12 +927,12 @@ export default function AuthScreen({
                   readOnly
                   value={district}
                   placeholder={t('Auto-populated from PIN', 'पिन से स्वतः भरा जाएगा', 'அஞ்சல் குறியீட்டிலிருந்து தானாகவே நிரப்பப்படும்', 'పిన్ నుండి స్వయంచాలకంగా పూరించబడుతుంది')}
-                  className="w-full p-5 text-xl font-extrabold bg-slate-200/90 text-slate-800 border-2 border-slate-300 rounded-xl cursor-not-allowed shadow-inner"
+                  className="w-full p-2.5 sm:p-3 text-sm sm:text-base font-extrabold bg-slate-200/90 text-slate-800 border border-slate-300 rounded-xl cursor-not-allowed shadow-inner"
                 />
               </div>
 
               <div>
-                <label className="block text-xl font-extrabold text-slate-700 mb-1">
+                <label className="block text-xs sm:text-sm font-extrabold text-slate-700 mb-1">
                   {t('State (Auto-filled)', 'राज्य (स्वतः भरा गया)', 'மாநிலம் (தானாக நிரப்பப்பட்டது)', 'రాష్ట్రం (స్వయంచాలకంగా పూరించబడింది)')}
                 </label>
                 <input
@@ -896,7 +940,7 @@ export default function AuthScreen({
                   readOnly
                   value={stateName}
                   placeholder={t('Auto-populated from PIN', 'पिन से स्वतः भरा जाएगा', 'அஞ்சல் குறியீட்டிலிருந்து தானாகவே நிரப்பப்படும்', 'పిన్ నుండి స్వయంచాలకంగా పూరించబడుతుంది')}
-                  className="w-full p-5 text-xl font-extrabold bg-slate-200/90 text-slate-800 border-2 border-slate-300 rounded-xl cursor-not-allowed shadow-inner"
+                  className="w-full p-2.5 sm:p-3 text-sm sm:text-base font-extrabold bg-slate-200/90 text-slate-800 border border-slate-300 rounded-xl cursor-not-allowed shadow-inner"
                 />
               </div>
             </div>
@@ -906,16 +950,16 @@ export default function AuthScreen({
           <button
             type="submit"
             disabled={isSubmittingReg}
-            className="w-full py-6 px-8 text-2xl rounded-2xl font-black text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:bg-slate-300 disabled:cursor-not-allowed transition-all shadow-2xl flex items-center justify-center gap-4 mt-8"
+            className="w-full py-3.5 sm:py-5 px-5 sm:px-8 text-base sm:text-2xl rounded-xl sm:rounded-2xl font-black text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:bg-slate-300 disabled:cursor-not-allowed transition-all shadow-xl flex items-center justify-center gap-2.5 sm:gap-4 mt-5 sm:mt-8"
           >
             {isSubmittingReg ? (
               <>
-                <RefreshCw className="w-8 h-8 animate-spin" />
+                <RefreshCw className="w-5 h-5 sm:w-7 sm:h-7 animate-spin" />
                 <span>{t('Registering Patient...', 'रोगी पंजीकृत हो रहा है...', 'நோயாளி பதிவு செய்யப்படுகிறார்...', 'రోగి నమోదు చేయబడుతున్నారు...')}</span>
               </>
             ) : (
               <>
-                <ShieldCheck className="w-9 h-9 text-white" />
+                <ShieldCheck className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
                 <span>{t('Register & Start Consultation', 'पंजीकरण करें और परामर्श शुरू करें', 'பதிவுசெய்து ஆலோசனையைத் தொடங்கவும்', 'నమోదు చేసి సంప్రదింపులు ప్రారంభించండి')}</span>
               </>
             )}

@@ -10,59 +10,72 @@ export default function Header() {
   const { t } = useLanguage()
   
   return (
-    <header className="bg-white border-b-2 border-slate-100 py-4 px-6 sticky top-0 z-50 shadow-sm">
-      <div className="container mx-auto max-w-7xl flex flex-col md:flex-row justify-between items-center gap-4">
+    <header className="bg-white border-b border-slate-200 py-2.5 sm:py-3.5 px-3 sm:px-6 sticky top-0 z-50 shadow-sm print:hidden">
+      <div className="container mx-auto max-w-7xl flex flex-col md:flex-row justify-between items-center gap-2.5 sm:gap-4">
         
-        {/* Left Side: MoHFW Logo & Kiosk Branding */}
-        <div className="flex items-center gap-3 sm:gap-4 shrink-0 justify-center md:justify-start w-full md:w-auto">
+        {/* Top/Left Row: AarogyaMitra Branding + ABDM Mobile Icon */}
+        <div className="flex items-center justify-between w-full md:w-auto shrink-0">
+          <Link href="/" className="flex items-center gap-2.5 sm:gap-3.5 group">
             <img
-              src="/logos/mohfw-logo.png"
-              alt="Ministry of Health and Family Welfare"
-              className="h-10 sm:h-12 w-auto object-contain"
+              src="/logos/aarogyamlogo.png"
+              alt="AarogyaMitra Logo"
+              className="h-8 sm:h-10 md:h-11 w-auto object-contain transition-transform group-hover:scale-105"
             />
-            <div className="h-12 w-px bg-slate-200 hidden sm:block"></div>
-          <div className="flex flex-col">
-            <span className="text-2xl md:text-3xl font-black tracking-tight text-blue-900 leading-none">आरोग्यMitra</span>
-            <span className="bg-blue-50 text-blue-800 text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider w-fit mt-1">
-              {t('Kiosk System', 'कियोस्क सिस्टम', 'கியோஸ்க் முறைமை', 'కియోస్క్ సిస్టమ్')}
-            </span>
+            <div className="h-8 w-px bg-slate-200 hidden xs:block sm:block"></div>
+            <div className="flex flex-col">
+              <span className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight text-blue-900 leading-none">
+                आरोग्यMitra
+              </span>
+              <span className="bg-blue-50 text-blue-800 text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider w-fit mt-0.5">
+                {t('Kiosk System', 'कियोस्क सिस्टम', 'கியோஸ்க் முறைமை', 'కియోస్క్ సిస్టమ్')}
+              </span>
+            </div>
+          </Link>
+
+          {/* ABDM Logo shown on right side on mobile */}
+          <div className="md:hidden shrink-0">
+            <img
+              src="/logos/abdm-logo.png"
+              alt="Ayushman Bharat Digital Mission"
+              className="h-9 sm:h-11 w-auto object-contain"
+            />
           </div>
         </div>
 
-        {/* Navigation / Role Switcher & Language Switcher */}
-        <div className="flex items-center gap-3 sm:gap-4 justify-center flex-wrap">
-          <nav className="flex items-center gap-2 sm:gap-3">
+        {/* Navigation / Role Switcher */}
+        <div className="flex items-center justify-center w-full md:w-auto">
+          <nav className="flex items-center gap-1.5 sm:gap-2.5 bg-slate-100/80 p-1 rounded-2xl border border-slate-200/80 w-full sm:w-auto justify-center">
             <Link
               href="/"
-              className={`flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-2xl transition-all border text-sm sm:text-base font-bold ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl transition-all text-xs sm:text-sm font-bold ${
                 pathname === '/' 
-                  ? 'bg-blue-50 text-blue-900 border-blue-200 shadow-sm' 
-                  : 'hover:bg-slate-50 text-slate-600 border-transparent'
+                  ? 'bg-white text-blue-900 shadow-sm border border-slate-200/80' 
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
               }`}
             >
-              <User className="w-5 h-5 text-blue-900" />
-              <span>{t('Patient Kiosk', 'रोगी कियोस्क', 'நோயாளி கியோஸ்க்', 'రోగి కియోస్క్')}</span>
+              <User className="w-4 h-4 text-blue-700 shrink-0" />
+              <span className="truncate">{t('Patient Kiosk', 'रोगी कियोस्क', 'நோயாளி கியோஸ்க்', 'రోగి కియోస్క్')}</span>
             </Link>
             <Link
               href="/doctor"
-              className={`flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-2xl transition-all border text-sm sm:text-base font-bold ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl transition-all text-xs sm:text-sm font-bold ${
                 pathname === '/doctor' 
-                  ? 'bg-slate-100 text-slate-900 border-slate-200 shadow-sm' 
-                  : 'hover:bg-slate-50 text-slate-600 border-transparent'
+                  ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80' 
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
               }`}
             >
-              <Stethoscope className="w-5 h-5 text-slate-900" />
-              <span>{t('Doctor OPD', 'डॉक्टर ओपीडी', 'மருத்துவர் OPD', 'వైద్యుల OPD')}</span>
+              <Stethoscope className="w-4 h-4 text-slate-800 shrink-0" />
+              <span className="truncate">{t('Doctor OPD', 'डॉक्टर ओपीडी', 'மருத்துவர் OPD', 'వైద్యుల OPD')}</span>
             </Link>
           </nav>
         </div>
 
-        {/* Right Side: ABDM Logo */}
-        <div className="flex items-center justify-end shrink-0">
+        {/* Right Side: ABDM Logo (Desktop) */}
+        <div className="hidden md:flex items-center justify-end shrink-0">
           <img
             src="/logos/abdm-logo.png"
             alt="Ayushman Bharat Digital Mission"
-            className="h-16 md:h-20 w-auto object-contain"
+            className="h-12 lg:h-14 w-auto object-contain"
           />
         </div>
 

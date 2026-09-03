@@ -30,3 +30,48 @@ body {
 .animate-pulse-mic {
   animation: pulse-mic 1.5s infinite;
 }
+
+/* =========================================================================
+   PROFESSIONAL CLINICAL PRINT STYLES
+   Ensures single-page, high-fidelity A4 OPD Consultation & EMR Summary slips
+   without web navigation, dark backgrounds, or multi-page spill.
+   ========================================================================= */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 8mm 12mm;
+  }
+
+  html, body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    font-size: 11pt !important;
+    line-height: 1.35 !important;
+    width: 100% !important;
+    height: auto !important;
+  }
+
+  header,
+  footer,
+  nav,
+  button,
+  .print\:hidden {
+    display: none !important;
+  }
+
+  /* Prevent page breaks across clinical sections */
+  .break-inside-avoid,
+  .print-avoid-break {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+}

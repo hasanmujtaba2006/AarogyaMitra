@@ -18,7 +18,9 @@ class AbhaUser(Base):
     state = Column(String(50), nullable=True) # State name
     pincode = Column(String(10), nullable=True) # Postal code
     auth_method = Column(String(30), default="DEMO") # AADHAAR_OTP, MOBILE_OTP, QR_CODE, DEMO
-    verification_status = Column(String(20), default="VERIFIED") # VERIFIED, PENDING
+    blood_group = Column(String(10), default="B+", nullable=True) # e.g. B+, O+, A+
+    allergies = Column(Text, default="No Known Allergies", nullable=True) # e.g. No Known Allergies
+    profile_photo = Column(Text, nullable=True) # Base64 data URL or photo link
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     sessions = relationship("PatientSession", back_populates="patient")

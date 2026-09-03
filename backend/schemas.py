@@ -22,6 +22,9 @@ class AbhaUserBase(BaseModel):
     pincode: Optional[str] = Field(None, example="226001")
     auth_method: Optional[str] = Field("DEMO", example="AADHAAR_OTP")
     verification_status: Optional[str] = Field("VERIFIED", example="VERIFIED")
+    blood_group: Optional[str] = Field("B+", example="B+")
+    allergies: Optional[str] = Field("No Known Allergies", example="No Known Allergies")
+    profile_photo: Optional[str] = Field(None, example=None)
 
 class AbhaUserCreate(AbhaUserBase):
     pass
@@ -57,6 +60,9 @@ class DemoProfileItem(BaseModel):
     district: str
     mobile: str
     dob: str
+    blood_group: Optional[str] = "B+"
+    allergies: Optional[str] = "No Known Allergies"
+    profile_photo: Optional[str] = None
     sample_qr: str
 
 # --- Chat History Schemas ---

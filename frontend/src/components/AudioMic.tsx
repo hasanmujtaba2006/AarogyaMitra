@@ -221,26 +221,26 @@ export default function AudioMic({ language, messages, onSendMessage, isProcessi
   }
 
   return (
-    <div className="flex-1 flex flex-col w-full max-w-4xl mx-auto bg-white rounded-3xl border-4 border-blue-900 shadow-2xl overflow-hidden min-h-[600px] my-6">
+    <div className="flex-1 flex flex-col w-full max-w-4xl mx-auto bg-white rounded-2xl sm:rounded-3xl border-2 sm:border-4 border-blue-900 shadow-xl sm:shadow-2xl overflow-hidden min-h-[480px] sm:min-h-[600px] my-2 sm:my-6">
       {/* Dialogue Header */}
-      <div className="bg-blue-900 text-white px-6 py-4 flex justify-between items-center shrink-0">
-        <div className="flex items-center gap-3">
-          <MessageSquare className="w-8 h-8" />
-          <span className="text-2xl font-extrabold">
+      <div className="bg-blue-900 text-white px-3.5 sm:px-6 py-2.5 sm:py-4 flex justify-between items-center shrink-0 gap-2">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <MessageSquare className="w-5 h-5 sm:w-8 sm:h-8 shrink-0" />
+          <span className="text-sm sm:text-2xl font-extrabold truncate">
             {t('Consulting Doctor (AI)', 'डॉक्टर से परामर्श (AI)', 'மருத்துவரிடம் ஆலோசனை (AI)', 'వైద్యునితో సంప్రదింపులు (AI)')}
           </span>
         </div>
-        <div className="bg-blue-800 text-sm px-4 py-1.5 rounded-full font-bold uppercase">
+        <div className="bg-blue-800 text-[10px] sm:text-sm px-2.5 sm:px-4 py-1 sm:py-1.5 rounded-full font-bold uppercase shrink-0">
           {t('Intake Phase', 'जानकारी चरण', 'தகவல் சேகரிப்பு', 'సమాచార దశ')}
         </div>
       </div>
 
       {/* Message History */}
-      <div className="flex-1 overflow-y-auto p-6 bg-slate-50 flex flex-col gap-6">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-6 bg-slate-50 flex flex-col gap-3 sm:gap-6 max-h-[450px] sm:max-h-[550px]">
         {messages.length === 0 ? (
-          <div className="flex-1 flex flex-col justify-center items-center text-slate-400 text-center py-12">
-            <Volume2 className="w-16 h-16 mb-4 text-slate-300" />
-            <p className="text-2xl font-bold">
+          <div className="flex-1 flex flex-col justify-center items-center text-slate-400 text-center py-8 sm:py-12">
+            <Volume2 className="w-10 h-10 sm:w-16 sm:h-16 mb-2 sm:mb-4 text-slate-300" />
+            <p className="text-base sm:text-2xl font-bold px-4">
               {t('Press the Microphone below to speak', 'बोलने के लिए नीचे दिए गए माइक्रोफ़ोन को दबाएं', 'பேசுவதற்கு கீழே உள்ள மைக்ரோஃபோனை அழுத்தவும்', 'మాట్లాడటానికి క్రింది మైక్రోఫోన్‌ను నొక్కండి')}
             </p>
           </div>
@@ -254,18 +254,18 @@ export default function AudioMic({ language, messages, onSendMessage, isProcessi
             return (
               <div
                 key={index}
-                className={`flex flex-col max-w-[85%] ${isUser ? 'self-end items-end' : 'self-start items-start'}`}
+                className={`flex flex-col max-w-[90%] sm:max-w-[85%] ${isUser ? 'self-end items-end' : 'self-start items-start'}`}
               >
                 <div
-                  className={`p-5 rounded-3xl text-xl md:text-2xl font-semibold shadow-md ${
+                  className={`p-3 sm:p-5 rounded-2xl sm:rounded-3xl text-sm sm:text-xl md:text-2xl font-semibold shadow-sm sm:shadow-md ${
                     isUser
                       ? 'bg-blue-800 text-white rounded-tr-none'
-                      : 'bg-white text-slate-900 border-2 border-slate-200 rounded-tl-none'
+                      : 'bg-white text-slate-900 border sm:border-2 border-slate-200 rounded-tl-none'
                   }`}
                 >
                   <p>{primaryText}</p>
                   {secondaryText && (
-                    <p className={`text-sm mt-2 font-medium border-t pt-1.5 ${isUser ? 'border-blue-700 text-blue-200' : 'border-slate-100 text-slate-500'}`}>
+                    <p className={`text-xs sm:text-sm mt-1.5 sm:mt-2 font-medium border-t pt-1 sm:pt-1.5 ${isUser ? 'border-blue-700 text-blue-200' : 'border-slate-100 text-slate-500'}`}>
                       {secondaryText}
                     </p>
                   )}
@@ -275,9 +275,9 @@ export default function AudioMic({ language, messages, onSendMessage, isProcessi
                 {!isUser && (
                   <button
                     onClick={() => handleSpeak(primaryText)}
-                    className="mt-2 text-blue-700 hover:text-blue-900 flex items-center gap-1.5 text-base font-bold bg-white px-3 py-1 rounded-full border border-blue-200 shadow-sm"
+                    className="mt-1.5 text-blue-700 hover:text-blue-900 flex items-center gap-1 sm:gap-1.5 text-xs sm:text-base font-bold bg-white px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full border border-blue-200 shadow-sm"
                   >
-                    <Volume2 className="w-5 h-5" />
+                    <Volume2 className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
                     <span>{t('Listen', 'सुनें', 'கேளுங்கள்', 'వినండి')}</span>
                   </button>
                 )}
@@ -286,13 +286,13 @@ export default function AudioMic({ language, messages, onSendMessage, isProcessi
           })
         )}
         {isProcessing && (
-          <div className="self-start bg-white text-slate-900 border-2 border-slate-200 p-5 rounded-3xl rounded-tl-none max-w-[85%] shadow-md flex items-center gap-3">
+          <div className="self-start bg-white text-slate-900 border border-slate-200 p-3 sm:p-5 rounded-2xl sm:rounded-3xl rounded-tl-none max-w-[90%] sm:max-w-[85%] shadow-sm sm:shadow-md flex items-center gap-2 sm:gap-3">
             <span className="flex gap-1">
-              <span className="h-3 w-3 bg-blue-800 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-              <span className="h-3 w-3 bg-blue-800 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-              <span className="h-3 w-3 bg-blue-800 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+              <span className="h-2 sm:h-3 w-2 sm:w-3 bg-blue-800 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+              <span className="h-2 sm:h-3 w-2 sm:w-3 bg-blue-800 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+              <span className="h-2 sm:h-3 w-2 sm:w-3 bg-blue-800 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
             </span>
-            <span className="text-lg font-bold text-slate-500">
+            <span className="text-xs sm:text-lg font-bold text-slate-500">
               {t('Processing...', 'प्रक्रिया जारी है...', 'செயலாக்குகிறது...', 'ప్రక్రియ జరుగుతోంది...')}
             </span>
           </div>
@@ -301,47 +301,47 @@ export default function AudioMic({ language, messages, onSendMessage, isProcessi
       </div>
 
       {/* Interaction panel: Big Microphone and Text input */}
-      <div className="border-t-4 border-slate-200 p-6 bg-white shrink-0 flex flex-col gap-4">
+      <div className="border-t-2 sm:border-t-4 border-slate-200 p-3 sm:p-6 bg-white shrink-0 flex flex-col gap-3 sm:gap-4">
         {speechError && (
-          <div className="bg-amber-50 border-2 border-amber-500 text-amber-800 px-4 py-3 rounded-xl flex items-center gap-2 text-lg font-bold">
-            <AlertCircle className="w-6 h-6 shrink-0" />
+          <div className="bg-amber-50 border-2 border-amber-500 text-amber-800 px-3 sm:px-4 py-2 sm:py-3 rounded-xl flex items-center gap-2 text-xs sm:text-lg font-bold">
+            <AlertCircle className="w-4 h-4 sm:w-6 sm:h-6 shrink-0" />
             <span>{speechError}</span>
           </div>
         )}
 
-        <div className="flex flex-col md:flex-row items-center gap-6 justify-center">
+        <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-6 justify-center">
           {/* Microphone & Bhashini Badge Container */}
-          <div className="flex flex-col items-center gap-3 shrink-0">
+          <div className="flex sm:flex-col items-center gap-2 sm:gap-3 shrink-0">
             {/* Big pulsing mic toggle */}
             <button
               onClick={toggleListening}
               disabled={isProcessing}
-              className={`w-28 h-28 rounded-full flex justify-center items-center text-white shadow-xl transition-all active:scale-90 ${
+              className={`w-16 h-16 sm:w-28 sm:h-28 rounded-full flex justify-center items-center text-white shadow-lg sm:shadow-xl transition-all active:scale-90 ${
                 isListening
                   ? 'bg-rose-600 animate-pulse-mic'
                   : 'bg-blue-800 hover:bg-blue-900'
               }`}
             >
               {isListening ? (
-                <Mic className="w-14 h-14" />
+                <Mic className="w-8 h-8 sm:w-14 sm:h-14" />
               ) : (
-                <MicOff className="w-14 h-14" />
+                <MicOff className="w-8 h-8 sm:w-14 sm:h-14" />
               )}
             </button>
 
             {/* Bhashini Pill Badge */}
-            <div className="flex items-center gap-2 bg-gray-100 text-gray-600 text-xs font-bold rounded-full px-4 py-2 border border-gray-200 shadow-sm">
+            <div className="flex items-center gap-1.5 sm:gap-2 bg-gray-100 text-gray-600 text-[10px] sm:text-xs font-bold rounded-full px-2.5 sm:px-4 py-1 sm:py-2 border border-gray-200 shadow-sm">
               <img
                 src="/logos/bhashini-logo.jpg"
                 alt="Bhashini Logo"
-                className="h-5 w-auto object-contain rounded"
+                className="h-4 sm:h-5 w-auto object-contain rounded"
               />
               <span>Powered by Bhashini</span>
             </div>
           </div>
 
           {/* Text input fallback form */}
-          <form onSubmit={handleSend} className="flex-1 w-full flex gap-3">
+          <form onSubmit={handleSend} className="flex-1 w-full flex gap-2 sm:gap-3">
             <input
               type="text"
               value={textInput}
@@ -351,20 +351,20 @@ export default function AudioMic({ language, messages, onSendMessage, isProcessi
                   ? t('Listening... speak now', 'सुन रहे हैं... कृपया बोलें', 'கேட்கிறது... இப்போது பேசுங்கள்', 'వింటున్నాము... ఇప్పుడు మాట్లాడండి')
                   : t('Type a message or press mic...', 'संदेश लिखें या माइक दबाएं...', 'செய்தியைத் தட்டச்சு செய்யவும்...', 'సందేశాన్ని టైప్ చేయండి...')
               }
-              className="flex-1 text-xl px-5 py-4 border-4 border-slate-300 rounded-2xl focus:border-blue-800 outline-none font-semibold"
+              className="flex-1 text-sm sm:text-xl px-3 sm:px-5 py-2.5 sm:py-4 border-2 sm:border-4 border-slate-300 rounded-xl sm:rounded-2xl focus:border-blue-800 outline-none font-semibold"
               disabled={isProcessing}
             />
             <button
               type="submit"
               disabled={!textInput.trim() || isProcessing}
-              className="w-20 bg-blue-800 hover:bg-blue-900 text-white rounded-2xl flex justify-center items-center active:scale-95 disabled:bg-slate-300 disabled:scale-100 transition-all shadow-md"
+              className="w-12 sm:w-20 bg-blue-800 hover:bg-blue-900 text-white rounded-xl sm:rounded-2xl flex justify-center items-center active:scale-95 disabled:bg-slate-300 disabled:scale-100 transition-all shadow-md shrink-0"
             >
-              <Send className="w-8 h-8" />
+              <Send className="w-4 h-4 sm:w-8 sm:h-8" />
             </button>
           </form>
         </div>
         
-        <p className="text-center text-sm font-bold text-slate-500">
+        <p className="text-center text-[11px] sm:text-sm font-bold text-slate-500">
           {t('Voice recording matches local dialect input (Bhashini compatible)', 'आवाज़ रिकॉर्डिंग स्थानीय भाषा के अनुकूल है', 'உள்ளூர் மொழி குரல் பதிவு', 'వాయిస్ రికార్డింగ్ స్థానిక భాషకు అనుకూలంగా ఉంటుంది')}
         </p>
       </div>

@@ -5,7 +5,7 @@ import { Globe, ChevronDown, Check } from 'lucide-react'
 import { LanguageCode, SUPPORTED_LANGUAGES, useLanguage } from '@/context/LanguageContext'
 
 interface LanguageSwitcherProps {
-  variant?: 'header' | 'dashboard' | 'compact';
+  variant?: 'header' | 'dashboard' | 'compact' | 'dropdown' | 'dark-dropdown';
   onLanguageChange?: (lang: LanguageCode) => void;
   className?: string;
 }
@@ -72,25 +72,76 @@ export default function LanguageSwitcher({
     )
   }
 
-  // Header / Dropdown variant: Compact dropdown with Globe icon
+  // Dark Dropdown variant for dark cards
+  if (variant === 'dark-dropdown') {
+    return (
+      <div className={`relative inline-block text-left ${className}`} ref={dropdownRef}>
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl border-2 border-slate-700 bg-slate-800/90 hover:bg-slate-800 text-white text-sm font-extrabold transition-all shadow-md active:scale-95 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+          aria-expanded={isOpen}
+          aria-haspopup="true"
+        >
+          <Globe className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{currentLangObj.nativeName}</span>
+          <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+        </button>
+
+        {isOpen && (
+          <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-slate-900 shadow-2xl border-2 border-slate-700 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+            <div className="px-3.5 py-1.5 border-b border-slate-800 text-[10px] font-black uppercase tracking-wider text-slate-400">
+              Select Language / भाषा चुनें
+            </div>
+            {SUPPORTED_LANGUAGES.map((item) => {
+              const isSelected = language === item.code
+              return (
+                <button
+                  key={item.code}
+                  type="button"
+                  onClick={() => handleSelect(item.code)}
+                  className={`w-full px-4 py-2.5 text-left text-sm font-bold flex items-center justify-between transition-colors ${
+                    isSelected
+                      ? 'bg-emerald-500/20 text-emerald-300 font-extrabold border-l-4 border-emerald-400'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-6 text-center text-xs font-black text-slate-400">
+                      {item.symbol}
+                    </span>
+                    <span>{item.nativeName}</span>
+                    <span className="text-xs text-slate-400 font-normal">({item.name})</span>
+                  </div>
+                  {isSelected && <Check className="w-4 h-4 text-emerald-400 stroke-[3]" />}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Header / Standard Dropdown variant: Compact dropdown with Globe icon
   return (
     <div className={`relative inline-block text-left ${className}`} ref={dropdownRef}>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3.5 py-2 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-sm font-extrabold transition-all shadow-sm active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-sm font-extrabold transition-all shadow-sm active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500"
         aria-expanded={isOpen}
         aria-haspopup="true"
       >
         <Globe className="w-4 h-4 text-blue-800 shrink-0" />
         <span className="text-xs sm:text-sm">{currentLangObj.nativeName}</span>
-        <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-52 rounded-2xl bg-white shadow-2xl border-2 border-slate-200 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-          <div className="px-3 py-1.5 border-b border-slate-100 text-[10px] font-black uppercase tracking-wider text-slate-400">
-            Switch App Language
+        <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-white shadow-2xl border-2 border-slate-200 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+          <div className="px-3.5 py-1.5 border-b border-slate-100 text-[10px] font-black uppercase tracking-wider text-slate-400">
+            Select Language / भाषा चुनें
           </div>
           {SUPPORTED_LANGUAGES.map((item) => {
             const isSelected = language === item.code
@@ -101,7 +152,7 @@ export default function LanguageSwitcher({
                 onClick={() => handleSelect(item.code)}
                 className={`w-full px-4 py-2.5 text-left text-sm font-bold flex items-center justify-between transition-colors ${
                   isSelected
-                    ? 'bg-blue-50 text-blue-900 font-extrabold'
+                    ? 'bg-blue-50 text-blue-900 font-extrabold border-l-4 border-blue-600'
                     : 'text-slate-700 hover:bg-slate-50'
                 }`}
               >
