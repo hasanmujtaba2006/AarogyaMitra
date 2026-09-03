@@ -16,6 +16,12 @@ class AbhaUserBase(BaseModel):
     gender: str = Field(..., example="M")
     date_of_birth: str = Field(..., example="1985-05-15")
     mobile_number: str = Field(..., example="+919876543210")
+    address: Optional[str] = Field(None, example="12, Shanti Nagar, Lucknow")
+    district: Optional[str] = Field(None, example="Lucknow")
+    state: Optional[str] = Field(None, example="Uttar Pradesh")
+    pincode: Optional[str] = Field(None, example="226001")
+    auth_method: Optional[str] = Field("DEMO", example="AADHAAR_OTP")
+    verification_status: Optional[str] = Field("VERIFIED", example="VERIFIED")
 
 class AbhaUserCreate(AbhaUserBase):
     pass
@@ -26,6 +32,32 @@ class AbhaUserResponse(AbhaUserBase):
 
     class Config:
         from_attributes = True
+
+class AbhaAuthInitRequest(BaseModel):
+    abha_id: str = Field(..., description="14-digit ABHA Number or ABHA Address username@abdm")
+    auth_mode: str = Field("aadhaar_otp", description="aadhaar_otp or mobile_otp")
+
+class AbhaAuthConfirmRequest(BaseModel):
+    abha_id: str
+    otp: str
+    txn_id: Optional[str] = None
+
+class AbhaQrVerifyRequest(BaseModel):
+    qr_data: str = Field(..., description="Scanned ABDM QR JSON or delimited string")
+
+class DemoProfileItem(BaseModel):
+    id: str
+    name: str
+    age: int
+    gender: str
+    abha_address: str
+    abha_number: str
+    location: str
+    state: str
+    district: str
+    mobile: str
+    dob: str
+    sample_qr: str
 
 # --- Chat History Schemas ---
 class InterviewHistoryBase(BaseModel):
@@ -71,3 +103,8 @@ class PatientSessionResponse(PatientSessionBase):
 class ClinicalUpdateRequest(BaseModel):
     doctor_notes: str
     doctor_prescription: str
+
+class SessionLanguageUpdate(BaseModel):
+    session_id: str
+    language: str
+

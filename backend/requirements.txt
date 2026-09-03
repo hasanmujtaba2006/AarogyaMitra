@@ -7,3 +7,5 @@ pydantic-settings>=2.0
 python-dotenv>=1.0.0
 httpx>=0.24.0
 python-multipart>=0.0.6
+firebase-admin>=6.2.0
+

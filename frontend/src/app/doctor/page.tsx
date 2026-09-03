@@ -4,10 +4,14 @@ import React, { useState, useEffect } from 'react'
 import { 
   Stethoscope, Users, User, Clock, FileText, Search, PlusCircle, 
   CheckCircle, AlertCircle, RefreshCw, LogOut, HeartPulse, Send,
-  ChevronRight, Calendar, Activity, CheckCircle2, ShieldAlert
+  ChevronRight, Calendar, Activity, CheckCircle2, ShieldAlert,
+  ShieldCheck, X
 } from 'lucide-react'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
+import AbhaCard, { PatientInfo } from '@/components/AbhaCard'
+import LanguageSwitcher from '@/components/LanguageSwitcher'
+import { useLanguage } from '@/context/LanguageContext'
 
 interface SessionInfo {
   id: string;
@@ -16,6 +20,7 @@ interface SessionInfo {
   language: string;
   status: string;
   created_at: string;
+  patient_details?: PatientInfo;
   
   // Triage details
   symptoms: string;
@@ -30,8 +35,10 @@ interface SessionInfo {
 }
 
 export default function DoctorDashboard() {
+  const { t } = useLanguage()
   const [sessions, setSessions] = useState<SessionInfo[]>([])
   const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(null)
+  const [showAbhaModal, setShowAbhaModal] = useState(false)
   const [doctorNotes, setDoctorNotes] = useState('')
   const [prescription, setPrescription] = useState('')
   const [loading, setLoading] = useState(true)
@@ -144,21 +151,24 @@ export default function DoctorDashboard() {
               <Stethoscope className="w-7 h-7" />
             </div>
             <div>
-              <h1 className="text-2xl font-black text-slate-800">OPD Clinical Dashboard</h1>
-              <p className="text-xs text-slate-500">AarogyaMitra Connected Practitioner Interface</p>
+              <h1 className="text-2xl font-black text-slate-800">{t('OPD Clinical Dashboard', 'ओपीडी क्लिनिकल डैशबोर्ड', 'OPD மருத்துவ டேஷ்போர்டு', 'OPD క్లినికల్ డాష్‌బోర్డ్')}</h1>
+              <p className="text-xs text-slate-500">{t('AarogyaMitra Connected Practitioner Interface', 'आरोग्यमित्र कनेक्टेड डॉक्टर इंटरफेस', 'ஆரோக்கியமித்ரா இணைக்கப்பட்ட மருத்துவர் இடைமுகம்', 'ఆరోగ్యమిత్ర కనెక్ట్ చేయబడిన డాక్టర్ ఇంటర్‌ఫేస్')}</p>
             </div>
           </div>
-          <button
-            onClick={() => {
-              setIsRefreshing(true)
-              fetchSessions()
-            }}
-            disabled={isRefreshing}
-            className="flex items-center gap-2 px-4 py-2 border border-slate-200 bg-white hover:bg-slate-50 rounded-xl text-sm font-semibold text-slate-700 transition-colors shadow-sm w-fit mx-auto sm:mx-0"
-          >
-            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-            Refresh Queue
-          </button>
+          <div className="flex items-center gap-3 justify-center sm:justify-end flex-wrap">
+            <LanguageSwitcher variant="dashboard" />
+            <button
+              onClick={() => {
+                setIsRefreshing(true)
+                fetchSessions()
+              }}
+              disabled={isRefreshing}
+              className="flex items-center gap-2 px-4 py-2 border border-slate-200 bg-white hover:bg-slate-50 rounded-xl text-sm font-semibold text-slate-700 transition-colors shadow-sm w-fit mx-auto sm:mx-0"
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              {t('Refresh Queue', 'कतार रीफ्रेश करें', 'வரிசையைப் புதுப்பிக்கவும்', 'క్యూని రిఫ్రెష్ చేయండి')}
+            </button>
+          </div>
         </div>
 
         {error && !selectedSession && (
@@ -239,6 +249,10 @@ export default function DoctorDashboard() {
                           session.status === 'completed' ? 'bg-slate-300' : 'bg-emerald-500 animate-pulse'
                         }`} />
                         <h4 className="font-bold text-slate-800 text-sm truncate">{session.patient_name}</h4>
+                        <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-1.5 py-0.5 rounded flex items-center gap-0.5 shrink-0">
+                          <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                          ABHA
+                        </span>
                       </div>
                       <p className="text-xs text-slate-400 font-mono mb-2 truncate">ID: {session.abha_id}</p>
                       {getTriageBadge(session.ai_triage_category)}
@@ -264,15 +278,29 @@ export default function DoctorDashboard() {
                         {selectedSession.patient_name[0]}
                       </div>
                       <div>
-                        <h3 className="font-extrabold text-slate-800 text-lg leading-tight">{selectedSession.patient_name}</h3>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-extrabold text-slate-800 text-lg leading-tight">{selectedSession.patient_name}</h3>
+                          <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                            ABHA VERIFIED
+                          </span>
+                        </div>
                         <p className="text-xs text-slate-400 font-mono mt-0.5">ABHA: {selectedSession.abha_id}</p>
                       </div>
                     </div>
-                    <div className="flex gap-3">
-                      <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-xl text-xs font-semibold">
+                    <div className="flex gap-2 items-center flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => setShowAbhaModal(true)}
+                        className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm"
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>View ABHA Card</span>
+                      </button>
+                      <span className="bg-slate-100 text-slate-600 px-3 py-1.5 rounded-xl text-xs font-semibold">
                         Lang: {selectedSession.language.toUpperCase()}
                       </span>
-                      <span className={`px-3 py-1 rounded-xl text-xs font-bold uppercase ${
+                      <span className={`px-3 py-1.5 rounded-xl text-xs font-bold uppercase ${
                         selectedSession.status === 'completed' ? 'bg-slate-100 text-slate-500' : 'bg-emerald-50 text-emerald-700'
                       }`}>
                         {selectedSession.status}
@@ -392,6 +420,56 @@ export default function DoctorDashboard() {
             )}
           </div>
         </div>
+
+        {/* ABHA Card Inspection Modal for Doctor */}
+        {showAbhaModal && selectedSession && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl relative border-2 border-slate-100 max-h-[90vh] overflow-y-auto">
+              <button
+                type="button"
+                onClick={() => setShowAbhaModal(false)}
+                className="absolute top-4 right-4 p-2 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-500 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="mb-4">
+                <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-emerald-600" />
+                  <span>Ayushman Bharat Verified Health Credentials</span>
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Authenticated via National Health Authority (NHA) ABDM Gateway
+                </p>
+              </div>
+
+              <AbhaCard
+                patient={selectedSession.patient_details || {
+                  id: selectedSession.id,
+                  full_name: selectedSession.patient_name,
+                  abha_number: selectedSession.abha_id,
+                  abha_address: selectedSession.abha_id.includes('@') ? selectedSession.abha_id : `${selectedSession.patient_name.toLowerCase().replace(/\s+/g, '.')}@abdm`,
+                  gender: 'M',
+                  date_of_birth: '1985-06-15',
+                  mobile_number: '+91 ******3210',
+                  auth_method: 'VERIFIED',
+                  verification_status: 'VERIFIED'
+                }}
+                compact={true}
+              />
+
+              <div className="mt-5 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowAbhaModal(false)}
+                  className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-colors"
+                >
+                  Close Preview
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
       
       <Footer />

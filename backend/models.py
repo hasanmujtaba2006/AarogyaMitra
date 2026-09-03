@@ -13,6 +13,12 @@ class AbhaUser(Base):
     gender = Column(String(10), nullable=False)
     date_of_birth = Column(String(10), nullable=False) # YYYY-MM-DD
     mobile_number = Column(String(15), nullable=False)
+    address = Column(Text, nullable=True) # Full residential address
+    district = Column(String(50), nullable=True) # District name
+    state = Column(String(50), nullable=True) # State name
+    pincode = Column(String(10), nullable=True) # Postal code
+    auth_method = Column(String(30), default="DEMO") # AADHAAR_OTP, MOBILE_OTP, QR_CODE, DEMO
+    verification_status = Column(String(20), default="VERIFIED") # VERIFIED, PENDING
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     sessions = relationship("PatientSession", back_populates="patient")

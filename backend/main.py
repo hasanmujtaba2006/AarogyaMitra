@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from config import settings
 from database import engine, Base, get_db
 from schemas import HealthResponse
-from routers import abdm, chat, ocr, triage
+from routers import abdm, chat, ocr, triage, custom_auth, auth_firebase
 
 # Create database tables at startup and migrate if needed
 def migrate_database():
@@ -32,6 +32,23 @@ def migrate_database():
                 print("Migration: Added column doctor_prescription to patient_sessions")
             conn.commit()
 
+    if "abha_users" in inspector.get_table_names():
+        abha_cols = [c["name"] for c in inspector.get_columns("abha_users")]
+        with engine.connect() as conn:
+            if "address" not in abha_cols:
+                conn.execute(text("ALTER TABLE abha_users ADD COLUMN address TEXT"))
+            if "district" not in abha_cols:
+                conn.execute(text("ALTER TABLE abha_users ADD COLUMN district VARCHAR(50)"))
+            if "state" not in abha_cols:
+                conn.execute(text("ALTER TABLE abha_users ADD COLUMN state VARCHAR(50)"))
+            if "pincode" not in abha_cols:
+                conn.execute(text("ALTER TABLE abha_users ADD COLUMN pincode VARCHAR(10)"))
+            if "auth_method" not in abha_cols:
+                conn.execute(text("ALTER TABLE abha_users ADD COLUMN auth_method VARCHAR(30) DEFAULT 'DEMO'"))
+            if "verification_status" not in abha_cols:
+                conn.execute(text("ALTER TABLE abha_users ADD COLUMN verification_status VARCHAR(20) DEFAULT 'VERIFIED'"))
+            conn.commit()
+
 try:
     migrate_database()
 except Exception as e:
@@ -39,10 +56,46 @@ except Exception as e:
 
 Base.metadata.create_all(bind=engine)
 
+import asyncio
+import logging
+from contextlib import asynccontextmanager
+
+logger = logging.getLogger("main")
+
+async def neon_keep_alive_worker():
+    """
+    Method B: Automated Background Keep-Alive Ping for Neon PostgreSQL.
+    Pings the database every 200 seconds (~3.3 minutes) with SELECT 1;.
+    Neon autosuspends after 300 seconds (5 minutes) of 0 activity.
+    By executing a lightweight query every ~3.3 minutes, the Neon compute
+    node stays warm 24/7 and never goes to sleep.
+    """
+    logger.info("Neon Keep-Alive Worker initialized: Pinging database every 200s to prevent autosuspend.")
+    while True:
+        await asyncio.sleep(200)
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1;"))
+            logger.info("[NEON-HEARTBEAT] Pinged Neon database successfully. Compute kept active.")
+        except Exception as e:
+            logger.warning(f"[NEON-HEARTBEAT] Keep-alive ping failed or reconnecting: {e}")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Only launch background keep-alive worker if not running in ephemeral serverless (e.g. Vercel)
+    worker_task = None
+    if not os.environ.get("VERCEL"):
+        worker_task = asyncio.create_task(neon_keep_alive_worker())
+    yield
+    # Clean shutdown
+    if worker_task:
+        worker_task.cancel()
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="Backend API for Smart India Hackathon AarogyaMitra Multilingual Healthcare Kiosk",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # Configure CORS
@@ -55,6 +108,8 @@ app.add_middleware(
 )
 
 # Register routers
+app.include_router(custom_auth.router)
+app.include_router(auth_firebase.router)
 app.include_router(abdm.router)
 app.include_router(chat.router)
 app.include_router(ocr.router)

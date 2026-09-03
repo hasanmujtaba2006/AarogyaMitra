@@ -1,23 +1,17 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { FileText, ArrowRight, UserCheck, Stethoscope, Sparkles, LogOut, CheckCircle, ShieldAlert } from 'lucide-react'
+import { FileText, ArrowRight, UserCheck, Stethoscope, Sparkles, LogOut, CheckCircle, ShieldAlert, ShieldCheck } from 'lucide-react'
 
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
-import AbhaSection from '@/components/AbhaSection'
+import AuthScreen from '@/components/AuthScreen'
+import LanguageSelector from '@/components/LanguageSelector'
+import LanguageSwitcher from '@/components/LanguageSwitcher'
 import AudioMic from '@/components/AudioMic'
 import PrescScanner from '@/components/PrescScanner'
-
-interface PatientInfo {
-  id: string;
-  abha_address: string;
-  abha_number: string;
-  full_name: string;
-  gender: string;
-  date_of_birth: string;
-  mobile_number: string;
-}
+import { PatientInfo } from '@/components/AbhaCard'
+import { LanguageCode, useLanguage } from '@/context/LanguageContext'
 
 interface Message {
   role: 'user' | 'assistant';
@@ -26,13 +20,14 @@ interface Message {
 }
 
 export default function KioskPage() {
+  const { language, setLanguage, setHasLoggedIn, t } = useLanguage()
+
   // Session configuration
   const [sessionId, setSessionId] = useState('')
-  const [language, setLanguage] = useState('en')
   const [patient, setPatient] = useState<PatientInfo | null>(null)
   
-  // Navigation Phase: 'login' | 'presc_choice' | 'presc_scan' | 'chat' | 'complete'
-  const [phase, setPhase] = useState<'login' | 'presc_choice' | 'presc_scan' | 'chat' | 'complete'>('login')
+  // Navigation Phase: 'language_select' | 'login' | 'presc_choice' | 'presc_scan' | 'chat' | 'complete'
+  const [phase, setPhase] = useState<'language_select' | 'login' | 'presc_choice' | 'presc_scan' | 'chat' | 'complete'>('language_select')
   
   // Chat state
   const [messages, setMessages] = useState<Message[]>([])
@@ -44,18 +39,63 @@ export default function KioskPage() {
   useEffect(() => {
     // Generate unique session ID on page load
     setSessionId('session_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now())
+
+    // Once a user logs in using their preferred app language, don't ask repeatedly
+    if (typeof window !== 'undefined') {
+      const savedLang = localStorage.getItem('aarogya_preferred_language') as LanguageCode | null
+      const hasAlreadyLoggedIn = localStorage.getItem('aarogya_has_logged_in') === 'true'
+      const savedPatient = localStorage.getItem('aarogya_patient_info')
+
+      if (savedLang && ['en', 'hi', 'ta', 'te'].includes(savedLang)) {
+        setLanguage(savedLang)
+      }
+
+      if (hasAlreadyLoggedIn && savedLang) {
+        // User previously logged in with preferred language, do NOT ask repeatedly!
+        if (savedPatient) {
+          try {
+            setPatient(JSON.parse(savedPatient))
+            setPhase('presc_choice')
+            return
+          } catch (e) {
+            // fallback to login
+          }
+        }
+        setPhase('login')
+      } else {
+        setPhase('language_select')
+      }
+    }
   }, [])
 
-  // Multi-lingual UI text helper
-  const t = (en: string, hi: string, ta: string, te: string) => {
-    if (language === 'hi') return hi
-    if (language === 'ta') return ta
-    if (language === 'te') return te
-    return en
+  const handleLanguageSelected = (chosenLang: LanguageCode) => {
+    setLanguage(chosenLang)
+    setPhase('login')
+  }
+
+  const handleDashboardLanguageChange = (newLang: LanguageCode) => {
+    setLanguage(newLang)
+    if (sessionId) {
+      fetch('/api/abdm/update-session-language', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          language: newLang
+        })
+      }).catch(err => console.error("Session language update error:", err))
+    }
   }
 
   const handleLoginSuccess = (patientData: PatientInfo) => {
     setPatient(patientData)
+    setHasLoggedIn(true)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('aarogya_has_logged_in', 'true')
+      localStorage.setItem('aarogya_preferred_language', language)
+      localStorage.setItem('aarogya_patient_info', JSON.stringify(patientData))
+    }
+
     // Create patient session in backend db
     fetch('/api/abdm/create-session', {
       method: 'POST',
@@ -74,7 +114,7 @@ export default function KioskPage() {
     setOcrText(extractedOcr)
     
     // Save OCR in backend session
-    fetch(`/api/ocr/save-text`, {
+    fetch('/api/ocr/save-text', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_id: sessionId, text: extractedOcr })
@@ -131,13 +171,13 @@ export default function KioskPage() {
 
     } catch (err) {
       console.error(err)
-      // Fallback Mock dialogue for Phase 2 validation
+      // Fallback Mock dialogue for validation
       setTimeout(() => {
         const mockResponses: Record<string, string> = {
           en: "Thank you for the information. Do you feel any chest pain, breathing difficulty, or radiating discomfort?",
-          hi: "जानकारी के लिए धन्यवाद। क्या आपको छाती में दर्द, सांस लेने में तकलीफ या बेचैनी महसूस हो रही है?",
-          ta: "தகவலுக்கு நன்றி. நெஞ்சு வலி, மூச்சு விடுவதில் சிரமம் அல்லது ஏதேனும் அசௌகரியம் இருக்கிறதா?",
-          te: "సమాచారానికి ధన్యవాదాలు. మీకు గుండెనొప్పి, శ్వాస తీసుకోవడంలో ఇబ్బంది లేదా ఏవైనా అసౌకర్యాలు ఉన్నాయా?"
+          hi: "जानकारी के लिए धन्यवाद। क्या आपको सीने में दर्द, सांस लेने में तकलीफ या घबराहट महसूस हो रही है?",
+          ta: "தகவலுக்கு நன்றி. உங்களுக்கு மார்பு வலி, மூச்சுத் திணறல் அல்லது அசௌகரியம் இருக்கிறதா?",
+          te: "సమాచారానికి ధన్యవాదాలు. మీకు ఛాతీ నొప్పి, శ్వాస తీసుకోవడంలో ఇబ్బంది లేదా అసౌకర్యంగా ఉందా?"
         }
         
         const mockResponse = mockResponses[language] || mockResponses['en']
@@ -148,7 +188,7 @@ export default function KioskPage() {
         }])
         
         // Mock triage if chest pain is mentioned
-        if (text.toLowerCase().includes('chest pain') || text.includes('दर्द') || text.includes('வலி')) {
+        if (text.toLowerCase().includes('chest pain') || text.includes('दर्द') || text.includes('வலி') || text.includes('నొప్పి')) {
           setTriageAlerted(true)
         }
       }, 1000)
@@ -187,6 +227,10 @@ export default function KioskPage() {
     setSessionSummary('')
     setTriageAlerted(false)
     setOcrText('')
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('aarogya_patient_info')
+    }
+    // After logging in once, stay on login without asking language repeatedly
     setPhase('login')
     setSessionId('session_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now())
   }
@@ -199,20 +243,35 @@ export default function KioskPage() {
       {patient && (
         <div className="max-w-4xl mx-auto w-full bg-slate-900 text-white rounded-3xl p-5 mb-4 shadow-lg border-2 border-slate-800 flex flex-wrap justify-between items-center gap-4">
           <div className="flex items-center gap-4">
-            <UserCheck className="w-10 h-10 text-emerald-400" />
+            <div className="relative">
+              <UserCheck className="w-10 h-10 text-emerald-400" />
+              <ShieldCheck className="w-5 h-5 text-emerald-300 absolute -bottom-1 -right-1 bg-slate-900 rounded-full" />
+            </div>
             <div>
-              <p className="text-sm font-semibold text-slate-400">{t('PATIENT REGISTERED', 'पंजीकृत मरीज', 'பதிவுசெய்யப்பட்ட நோயாளி', 'రిజిస్టర్డ్ రోగి')}</p>
-              <h3 className="text-2xl font-black">{patient.full_name} ({patient.gender === 'M' ? t('Male', 'पुरुष', 'ஆண்', 'పురుషుడు') : t('Female', 'महिला', 'பெண்', 'స్త్రీ')})</h3>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{t('PATIENT REGISTERED', 'पंजीकृत रोगी', 'பதிவுசெய்யப்பட்ட நோயாளி', 'రిజిస్టర్డ్ రోగి')}</span>
+                <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-emerald-500/40">
+                  ABHA VERIFIED
+                </span>
+              </div>
+              <h3 className="text-2xl font-black">
+                {patient.full_name} ({patient.gender === 'M' ? t('Male', 'पुरुष', 'ஆண்', 'పురుషుడు') : t('Female', 'महिला', 'பெண்', 'స్త్రీ')})
+              </h3>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="font-mono text-base font-bold bg-slate-800 px-4 py-2 rounded-xl border border-slate-700">
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Dashboard Option to Switch App Language */}
+            <LanguageSwitcher
+              variant="dashboard"
+              onLanguageChange={handleDashboardLanguageChange}
+            />
+            <span className="font-mono text-base font-bold bg-slate-800 px-4 py-2 rounded-xl border border-slate-700 text-emerald-300">
               ABHA: {patient.abha_number}
             </span>
             <button
               onClick={handleRestart}
               className="bg-red-700/80 hover:bg-red-700 p-3 rounded-xl transition-all"
-              title="Logout"
+              title={t('Logout / End Session', 'लॉग आउट / सत्र समाप्त करें', 'வெளியேறு', 'లాగౌట్')}
             >
               <LogOut className="w-6 h-6" />
             </button>
@@ -235,10 +294,24 @@ export default function KioskPage() {
         </div>
       )}
 
+      {/* PHASE 0: PREFERRED LANGUAGE SELECTION (Asked on website before login) */}
+      {phase === 'language_select' && (
+        <LanguageSelector onLanguageSelected={handleLanguageSelected} />
+      )}
+
       {/* PHASE 1: LOGIN / REGISTRATION */}
       {phase === 'login' && (
-        <div className="w-full max-w-2xl mx-auto my-6">
-          <AbhaSection
+        <div className="w-full max-w-3xl mx-auto my-6">
+          <div className="flex justify-end items-center mb-2 px-2">
+            <button
+              type="button"
+              onClick={() => setPhase('language_select')}
+              className="text-sm font-black text-blue-700 hover:text-blue-900 underline flex items-center gap-1.5"
+            >
+              <span>{t('Change Preferred Language', 'भाषा बदलें', 'மொழியை மாற்றவும்', 'భాషను మార్చండి')}</span>
+            </button>
+          </div>
+          <AuthScreen
             language={language}
             setLanguage={setLanguage}
             onLoginSuccess={handleLoginSuccess}
@@ -314,7 +387,7 @@ export default function KioskPage() {
         </div>
       )}
 
-      {/* PHASE 5: COMPLETED SESSION SUMMARY SUMMARY */}
+      {/* PHASE 5: COMPLETED SESSION SUMMARY */}
       {phase === 'complete' && (
         <div className="w-full max-w-2xl mx-auto bg-white rounded-3xl border-4 border-emerald-600 shadow-2xl p-8 my-6 text-center">
           <CheckCircle className="w-24 h-24 text-emerald-600 mx-auto mb-6" />
@@ -337,7 +410,7 @@ export default function KioskPage() {
             {patient && (
               <div className="grid grid-cols-2 gap-4 text-base font-bold text-slate-700">
                 <div>
-                  <span className="text-slate-400 block text-xs uppercase">{t('Patient Name', 'मरीज का नाम', 'நோயாளி பெயர்', 'రోగి పేరు')}</span>
+                  <span className="text-slate-400 block text-xs uppercase">{t('Patient Name', 'रोगी का नाम', 'நோயாளி பெயர்', 'రోగి పేరు')}</span>
                   <span>{patient.full_name}</span>
                 </div>
                 <div>
@@ -352,7 +425,7 @@ export default function KioskPage() {
             onClick={handleRestart}
             className="w-full h-20 bg-blue-800 hover:bg-blue-900 text-white font-extrabold text-2xl rounded-2xl active:scale-95 transition-all shadow-lg"
           >
-            {t('Finish & Reset Kiosk', 'अगला मरीज / रीसेट करें', 'அடுத்த நோயாளி / ரீசெட்', 'తదుపరి రోగి / రీసెట్')}
+            {t('Finish & Reset Kiosk', 'अगला रोगी / रीसेट करें', 'அடுத்த நோயாளி / ரீசெட்', 'తదుపరి రోగి / రీసెట్')}
           </button>
         </div>
       )}
