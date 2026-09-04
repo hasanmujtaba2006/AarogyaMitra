@@ -5,13 +5,23 @@ import {
   Stethoscope, Users, User, Clock, FileText, Search, PlusCircle, 
   CheckCircle, AlertCircle, RefreshCw, LogOut, HeartPulse, Send,
   ChevronRight, Calendar, Activity, CheckCircle2, ShieldAlert,
-  ShieldCheck, X
+  ShieldCheck, X, Bell, Pill, Trash2, Plus, Sparkles, CheckSquare,
+  Building2
 } from 'lucide-react'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import AbhaCard, { PatientInfo } from '@/components/AbhaCard'
 import LanguageSwitcher from '@/components/LanguageSwitcher'
+import StructuredClinicalSummaryCard from '@/components/StructuredClinicalSummaryCard'
 import { useLanguage } from '@/context/LanguageContext'
+
+export interface PrescribedMed {
+  name: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  instructions: string;
+}
 
 interface SessionInfo {
   id: string;
@@ -28,10 +38,23 @@ interface SessionInfo {
   severity: string;
   vital_signs: string;
   
-  // AI recommendations
+  // AI recommendations & EHR
   ai_triage_category: string;
   ai_recommendation: string;
   session_summary: string;
+  structured_summary?: any;
+  
+  // Doctor Queue details
+  queue_token?: string;
+  queue_status?: string;
+  assigned_doctor_name?: string;
+  assigned_doctor_room?: string;
+  assigned_doctor_specialty?: string;
+  assigned_doctor_post?: string;
+  assigned_doctor_fee?: string;
+  
+  doctor_notes?: string;
+  doctor_prescription?: string;
 }
 
 export default function DoctorDashboard() {
@@ -72,12 +95,102 @@ export default function DoctorDashboard() {
     return () => clearInterval(interval)
   }, [])
 
+  const [diagnosis, setDiagnosis] = useState('')
+  const [medications, setMedications] = useState<PrescribedMed[]>([
+    { name: 'Tab Pantoprazole 40mg', dosage: '40mg', frequency: '1-0-0', duration: '5 days', instructions: 'Before breakfast' }
+  ])
+  const [followUp, setFollowUp] = useState('Review in OPD after 5 days if symptoms persist.')
+  const [callingPatient, setCallingPatient] = useState(false)
+
   const handleSelectSession = (session: SessionInfo) => {
     setSelectedSession(session)
-    setDoctorNotes('')
-    setPrescription('')
+    setDoctorNotes(session.doctor_notes || '')
+    setPrescription(session.doctor_prescription || '')
+    
+    // Pre-fill diagnosis from structured summary if available
+    const struct = session.structured_summary
+    if (struct?.confirmed_diagnosis) {
+      setDiagnosis(struct.confirmed_diagnosis)
+    } else if (struct?.provisional_diagnosis) {
+      setDiagnosis(struct.provisional_diagnosis)
+    } else {
+      setDiagnosis('')
+    }
+
+    // Pre-fill medications
+    if (struct?.prescribed_medications && Array.isArray(struct.prescribed_medications)) {
+      setMedications(struct.prescribed_medications)
+    } else {
+      const sym = (session.symptoms || '').toLowerCase()
+      if (sym.includes('pet') || sym.includes('stomach') || sym.includes('abdomen') || sym.includes('acidity') || sym.includes('gas')) {
+        setMedications([
+          { name: 'Tab Pantoprazole 40mg', dosage: '40mg', frequency: '1-0-0', duration: '5 days', instructions: 'Before breakfast (empty stomach)' },
+          { name: 'Syp Gelusil Antacid', dosage: '10ml', frequency: '1-1-1', duration: '3 days', instructions: 'After meals' }
+        ])
+      } else if (sym.includes('sir') || sym.includes('head') || sym.includes('fever') || sym.includes('bukhar') || sym.includes('cold')) {
+        setMedications([
+          { name: 'Tab Paracetamol 650mg', dosage: '650mg', frequency: '1-0-1', duration: '3 days', instructions: 'After meals' }
+        ])
+      } else {
+        setMedications([
+          { name: 'Tab Paracetamol 650mg', dosage: '650mg', frequency: '1-0-1', duration: '3 days', instructions: 'After meals' }
+        ])
+      }
+    }
+
+    if (struct?.follow_up_advice) {
+      setFollowUp(struct.follow_up_advice)
+    } else {
+      setFollowUp('Review in OPD after 5 days if pain or symptoms persist.')
+    }
+
     setMessage('')
-    setMobileTab('consultation') // Switch to consultation tab on mobile when patient is selected
+    setMobileTab('consultation')
+  }
+
+  const handleCallPatient = async (sessionId: string) => {
+    setCallingPatient(true)
+    setMessage('')
+    setError('')
+    try {
+      const res = await fetch('/api/chat/doctor/call-patient', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId })
+      })
+      if (res.ok) {
+        setMessage('🔔 Patient called! Audio chime and visual banner triggered on patient kiosk screen.')
+        fetchSessions(true)
+        if (selectedSession && selectedSession.id === sessionId) {
+          setSelectedSession({ ...selectedSession, queue_status: 'called' })
+        }
+      } else {
+        throw new Error('Server returned error while calling patient')
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to call patient')
+    } finally {
+      setCallingPatient(false)
+    }
+  }
+
+  const handleAddMedication = () => {
+    setMedications(prev => [
+      ...prev,
+      { name: '', dosage: '1 Tab', frequency: '1-0-1', duration: '3 days', instructions: 'After meals' }
+    ])
+  }
+
+  const handleRemoveMedication = (index: number) => {
+    setMedications(prev => prev.filter((_, idx) => idx !== index))
+  }
+
+  const handleUpdateMedication = (index: number, field: keyof PrescribedMed, val: string) => {
+    setMedications(prev => {
+      const updated = [...prev]
+      updated[index] = { ...updated[index], [field]: val }
+      return updated
+    })
   }
 
   const handleSavePrescription = async (e: React.FormEvent) => {
@@ -87,6 +200,11 @@ export default function DoctorDashboard() {
     setSaving(true)
     setMessage('')
     setError('')
+
+    const formattedPrescription = prescription.trim() || medications
+      .filter(m => m.name.trim())
+      .map(m => `- ${m.name} (${m.dosage}) | ${m.frequency} x ${m.duration} [${m.instructions}]`)
+      .join('\n')
     
     try {
       const response = await fetch(`/api/chat/doctor/sessions/${selectedSession.id}/prescription`, {
@@ -94,21 +212,50 @@ export default function DoctorDashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           doctor_notes: doctorNotes,
-          doctor_prescription: prescription
+          doctor_prescription: formattedPrescription,
+          diagnosis: diagnosis,
+          medications: medications.filter(m => m.name.trim()),
+          follow_up: followUp
         })
       })
       
       if (!response.ok) throw new Error('Failed to save prescription')
       
-      setMessage('Prescription and notes saved successfully. FHIR care context linked.')
+      setMessage('Prescription, confirmed diagnosis and consultation notes saved successfully to Medical Records!')
       fetchSessions(true)
       
       setSelectedSession({
         ...selectedSession,
-        status: 'completed'
+        status: 'attended',
+        queue_status: 'completed',
+        doctor_notes: doctorNotes,
+        doctor_prescription: formattedPrescription
       })
+
+      // Update patient localStorage medical records if present
+      if (typeof window !== 'undefined') {
+        try {
+          const recStr = localStorage.getItem('aarogya_medical_records')
+          let recs = recStr ? JSON.parse(recStr) : []
+          const updated = recs.map((r: any) => {
+            if (r.session_id === selectedSession.id || r.id.includes(selectedSession.id)) {
+              return {
+                ...r,
+                status: 'Consultation Completed',
+                confirmed_diagnosis: diagnosis,
+                medications: medications.filter(m => m.name.trim()),
+                doctor_prescription: formattedPrescription,
+                doctor_notes: doctorNotes,
+                follow_up: followUp
+              }
+            }
+            return r
+          })
+          localStorage.setItem('aarogya_medical_records', JSON.stringify(updated))
+        } catch (e) {}
+      }
     } catch (err: any) {
-      setError(err.message || 'Failed to submit data')
+      setError(err.message || 'Failed to submit clinical data')
     } finally {
       setSaving(false)
     }
@@ -235,31 +382,61 @@ export default function DoctorDashboard() {
                   <span className="text-sm font-medium">No patient sessions registered today.</span>
                 </div>
               ) : (
-                sessions.map((session) => (
-                  <button
-                    key={session.id}
-                    onClick={() => handleSelectSession(session)}
-                    className={`w-full p-4 text-left transition-all hover:bg-slate-50/60 flex items-center justify-between gap-4 ${
-                      selectedSession?.id === session.id ? 'bg-slate-50 border-l-4 border-l-[#002F6C]' : ''
-                    }`}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className={`w-2.5 h-2.5 rounded-full ${
-                          session.status === 'completed' ? 'bg-slate-300' : 'bg-emerald-500 animate-pulse'
-                        }`} />
-                        <h4 className="font-bold text-slate-800 text-sm truncate">{session.patient_name}</h4>
-                        <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-1.5 py-0.5 rounded flex items-center gap-0.5 shrink-0">
-                          <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                          ABHA
-                        </span>
+                sessions.map((session) => {
+                  const token = session.queue_token || `OPD-${session.id.slice(-4).toUpperCase()}`
+                  const isCalled = session.queue_status === 'called'
+                  const isCompleted = session.status === 'completed' || session.queue_status === 'completed'
+
+                  return (
+                    <button
+                      key={session.id}
+                      onClick={() => handleSelectSession(session)}
+                      className={`w-full p-3.5 sm:p-4 text-left transition-all hover:bg-slate-50/70 flex items-center justify-between gap-3 ${
+                        selectedSession?.id === session.id ? 'bg-slate-50 border-l-4 border-l-[#002F6C]' : ''
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="px-2 py-0.5 bg-blue-900 text-white font-mono text-xs font-black rounded-md shadow-xs">
+                            {token}
+                          </span>
+                          {isCalled ? (
+                            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-black rounded-full animate-pulse border border-emerald-300 flex items-center gap-1">
+                              <Bell className="w-3 h-3 text-emerald-600" />
+                              CALLED
+                            </span>
+                          ) : isCompleted ? (
+                            <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-bold rounded-full border border-slate-200">
+                              COMPLETED
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-bold rounded-full border border-amber-200">
+                              WAITING
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className="font-bold text-slate-800 text-sm truncate">{session.patient_name}</h4>
+                          <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-1.5 py-0.5 rounded flex items-center gap-0.5 shrink-0">
+                            <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                            ABHA
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between text-xs text-slate-400 font-mono mb-2">
+                          <span className="truncate">ABHA: {session.abha_id || 'Self-registered'}</span>
+                          {session.assigned_doctor_room && (
+                            <span className="text-blue-900 font-bold">Room {session.assigned_doctor_room}</span>
+                          )}
+                        </div>
+
+                        {getTriageBadge(session.ai_triage_category)}
                       </div>
-                      <p className="text-xs text-slate-400 font-mono mb-2 truncate">ID: {session.abha_id}</p>
-                      {getTriageBadge(session.ai_triage_category)}
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-slate-300" />
-                  </button>
-                ))
+                      <ChevronRight className="w-5 h-5 text-slate-300 shrink-0" />
+                    </button>
+                  )
+                })
               )}
             </div>
           </div>
@@ -271,8 +448,9 @@ export default function DoctorDashboard() {
             {selectedSession ? (
               <div className="flex-1 flex flex-col justify-between">
                 <div>
-                  {/* Patient mini card */}
-                  <div className="bg-slate-50 rounded-xl sm:rounded-2xl border border-slate-100 p-3.5 sm:p-5 mb-4 sm:mb-6 flex flex-wrap justify-between items-center gap-3 sm:gap-4">
+                <div className="space-y-6">
+                  {/* Patient Header Card with Call Button */}
+                  <div className="bg-slate-50 rounded-xl sm:rounded-2xl border border-slate-200 p-4 sm:p-5 flex flex-wrap justify-between items-center gap-4">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 bg-[#002F6C]/10 rounded-2xl flex items-center justify-center text-[#002F6C] font-black text-lg">
                         {selectedSession.patient_name[0]}
@@ -285,128 +463,246 @@ export default function DoctorDashboard() {
                             ABHA VERIFIED
                           </span>
                         </div>
-                        <p className="text-xs text-slate-400 font-mono mt-0.5">ABHA: {selectedSession.abha_id}</p>
+                        <div className="flex items-center gap-2 text-xs text-slate-400 font-mono mt-0.5">
+                          <span>ABHA: {selectedSession.abha_id}</span>
+                          {selectedSession.queue_token && (
+                            <span className="px-2 py-0.5 bg-blue-900 text-white font-black rounded-md">
+                              Token: {selectedSession.queue_token}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
+
                     <div className="flex gap-2 items-center flex-wrap">
+                      {/* Call Patient to Room Button */}
+                      <button
+                        type="button"
+                        onClick={() => handleCallPatient(selectedSession.id)}
+                        disabled={callingPatient}
+                        className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all shadow-sm ${
+                          selectedSession.queue_status === 'called'
+                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white animate-pulse'
+                            : 'bg-amber-600 hover:bg-amber-700 text-white'
+                        }`}
+                      >
+                        <Bell className={`w-3.5 h-3.5 ${callingPatient ? 'animate-spin' : 'animate-bounce'}`} />
+                        <span>
+                          {callingPatient
+                            ? 'Calling Patient...'
+                            : selectedSession.queue_status === 'called'
+                            ? '🔔 Patient Called (Ring Again)'
+                            : '🔔 Call Patient to Room'}
+                        </span>
+                      </button>
+
                       <button
                         type="button"
                         onClick={() => setShowAbhaModal(true)}
-                        className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm"
+                        className="bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs"
                       >
                         <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                         <span>View ABHA Card</span>
                       </button>
-                      <span className="bg-slate-100 text-slate-600 px-3 py-1.5 rounded-xl text-xs font-semibold">
-                        Lang: {selectedSession.language.toUpperCase()}
-                      </span>
-                      <span className={`px-3 py-1.5 rounded-xl text-xs font-bold uppercase ${
-                        selectedSession.status === 'completed' ? 'bg-slate-100 text-slate-500' : 'bg-emerald-50 text-emerald-700'
+
+                      <span className={`px-3 py-2 rounded-xl text-xs font-black uppercase ${
+                        selectedSession.status === 'attended' || selectedSession.status === 'completed'
+                          ? 'bg-slate-100 text-slate-500'
+                          : 'bg-emerald-100 text-emerald-800'
                       }`}>
                         {selectedSession.status}
                       </span>
                     </div>
                   </div>
 
-                  {/* AI Triage outputs */}
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-6 mb-6">
-                    <div className="md:col-span-4 bg-slate-50 rounded-2xl p-4 border border-slate-100">
-                      <h4 className="font-bold text-xs text-slate-400 uppercase tracking-wider mb-3">AI Diagnostic Triage</h4>
-                      {getTriageBadge(selectedSession.ai_triage_category)}
-                      
-                      <div className="mt-4 space-y-2.5 text-xs text-slate-600">
-                        <div>
-                          <span className="text-slate-400 block">Symptoms</span>
-                          <span className="font-semibold text-slate-800">{selectedSession.symptoms || 'None reported'}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 block">Duration</span>
-                          <span className="font-semibold text-slate-800">{selectedSession.duration || 'N/A'}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 block">Severity</span>
-                          <span className="font-semibold text-slate-800">{selectedSession.severity || 'N/A'}</span>
-                        </div>
-                        {selectedSession.vital_signs && (
-                          <div>
-                            <span className="text-slate-400 block">Vital Signs / Scanner</span>
-                            <span className="font-semibold text-slate-800 font-mono whitespace-pre-wrap">{selectedSession.vital_signs}</span>
-                          </div>
-                        )}
-                      </div>
+                  {/* Submission success/error message */}
+                  {message && (
+                    <div className="p-4 bg-emerald-50 text-emerald-900 border border-emerald-200 rounded-xl flex items-center gap-2.5 text-sm font-bold shadow-xs">
+                      <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+                      <span>{message}</span>
                     </div>
+                  )}
 
-                    <div className="md:col-span-8 bg-slate-50 rounded-2xl p-4 border border-slate-100 flex flex-col justify-between">
-                      <div>
-                        <h4 className="font-bold text-xs text-slate-400 uppercase tracking-wider mb-2">AI Summary</h4>
-                        <p className="text-slate-700 text-xs leading-relaxed italic bg-white p-3 rounded-xl border border-slate-100 font-medium">
-                          "{selectedSession.session_summary || 'No summary available.'}"
-                        </p>
-                      </div>
-                      
-                      <div className="mt-4">
-                        <h4 className="font-bold text-xs text-slate-400 uppercase tracking-wider mb-1.5">AI Primary Recommendation</h4>
-                        <p className="text-slate-600 text-xs leading-relaxed whitespace-pre-wrap bg-white p-3 rounded-xl border border-slate-100">
-                          {selectedSession.ai_recommendation || 'No recommendation.'}
-                        </p>
-                      </div>
+                  {error && selectedSession && (
+                    <div className="p-4 bg-red-50 text-red-800 border border-red-100 rounded-xl flex items-center gap-2.5 text-sm font-medium">
+                      <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+                      <span>{error}</span>
                     </div>
+                  )}
+
+                  {/* SECTION 1: STRUCTURED CLINICAL HISTORY AND EHR SUMMARY */}
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5 text-blue-700" />
+                      <span>Structured Clinical History & Intake Summary (AI Verified)</span>
+                    </h4>
+
+                    <StructuredClinicalSummaryCard
+                      data={selectedSession.structured_summary}
+                      rawText={selectedSession.session_summary}
+                    />
                   </div>
 
-                  {/* Submission success message */}
-                  {message && (
-                    <div className="mb-6 p-4 bg-emerald-50 text-emerald-800 border border-emerald-100 rounded-xl flex items-center gap-2.5 text-sm">
-                      <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
-                      <span className="font-medium">{message}</span>
+                  {/* SECTION 2: STRUCTURED PRESCRIPTION & DIAGNOSIS BUILDER */}
+                  <form onSubmit={handleSavePrescription} className="space-y-4 bg-slate-50/70 p-4 sm:p-5 rounded-2xl border border-slate-200">
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                      <div>
+                        <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
+                          <Pill className="w-4 h-4 text-emerald-600" />
+                          <span>Physician Consultation & Structured Prescription</span>
+                        </h4>
+                        <p className="text-xs text-slate-500">Enter confirmed diagnosis and prescription to link with patient's Medical Records.</p>
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-400 font-mono">FHIR CarePlan v4.0.1</span>
                     </div>
-                  )}
 
-                  {/* Submission error message */}
-                  {error && selectedSession && (
-                    <div className="mb-6 p-4 bg-red-50 text-red-800 border border-red-100 rounded-xl flex items-center gap-2.5 text-sm">
-                      <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
-                      <span className="font-medium">{error}</span>
+                    {/* Confirmed Diagnosis */}
+                    <div>
+                      <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1.5">
+                        Confirmed Diagnosis / Clinical Assessment
+                      </label>
+                      <input
+                        type="text"
+                        value={diagnosis}
+                        onChange={(e) => setDiagnosis(e.target.value)}
+                        placeholder="e.g. Acute Gastritis with Dyspepsia / GERD"
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900 text-slate-800 text-sm font-bold shadow-xs"
+                      />
                     </div>
-                  )}
 
-                  {/* Clinical input forms */}
-                  <form onSubmit={handleSavePrescription} className="space-y-4">
+                    {/* Structured Medications Table */}
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-black text-slate-700 uppercase tracking-wider">
+                          Prescribed Medications
+                        </label>
+                        <button
+                          type="button"
+                          onClick={handleAddMedication}
+                          className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add Medicine</span>
+                        </button>
+                      </div>
+
+                      {/* Quick Prescription Presets */}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[10px] font-bold text-slate-400">Quick Presets:</span>
+                        {[
+                          { name: 'Tab Pantoprazole 40mg', dosage: '40mg', frequency: '1-0-0', duration: '5 days', instructions: 'Before food' },
+                          { name: 'Tab Paracetamol 650mg', dosage: '650mg', frequency: '1-0-1', duration: '3 days', instructions: 'After food' },
+                          { name: 'Syp Gelusil Antacid', dosage: '10ml', frequency: '1-1-1', duration: '3 days', instructions: 'After food' },
+                          { name: 'ORS Sachet (Electrolyte)', dosage: '1 Sachet in 1L', frequency: 'TDS', duration: '2 days', instructions: 'Sip throughout day' },
+                          { name: 'Tab Cetirizine 10mg', dosage: '10mg', frequency: '0-0-1', duration: '5 days', instructions: 'At bedtime' }
+                        ].map((preset, pIdx) => (
+                          <button
+                            key={pIdx}
+                            type="button"
+                            onClick={() => {
+                              if (!medications.some(m => m.name === preset.name)) {
+                                setMedications(prev => [...prev, preset])
+                              }
+                            }}
+                            className="px-2 py-0.5 bg-white hover:bg-blue-50 text-blue-900 border border-slate-200 rounded-md text-[11px] font-bold shadow-2xs"
+                          >
+                            + {preset.name}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="space-y-2">
+                        {medications.map((med, mIdx) => (
+                          <div key={mIdx} className="grid grid-cols-1 sm:grid-cols-12 gap-2 bg-white p-2.5 rounded-xl border border-slate-200 items-center shadow-xs">
+                            <div className="sm:col-span-4">
+                              <input
+                                type="text"
+                                value={med.name}
+                                onChange={(e) => handleUpdateMedication(mIdx, 'name', e.target.value)}
+                                placeholder="Medicine name (e.g. Tab Pantoprazole 40mg)"
+                                className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-900"
+                              />
+                            </div>
+                            <div className="sm:col-span-2">
+                              <input
+                                type="text"
+                                value={med.dosage}
+                                onChange={(e) => handleUpdateMedication(mIdx, 'dosage', e.target.value)}
+                                placeholder="Dosage (e.g. 40mg)"
+                                className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none focus:border-blue-900"
+                              />
+                            </div>
+                            <div className="sm:col-span-2">
+                              <input
+                                type="text"
+                                value={med.frequency}
+                                onChange={(e) => handleUpdateMedication(mIdx, 'frequency', e.target.value)}
+                                placeholder="Frequency (1-0-1)"
+                                className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none focus:border-blue-900"
+                              />
+                            </div>
+                            <div className="sm:col-span-3">
+                              <input
+                                type="text"
+                                value={med.instructions}
+                                onChange={(e) => handleUpdateMedication(mIdx, 'instructions', e.target.value)}
+                                placeholder="Instructions (e.g. Before food)"
+                                className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none focus:border-blue-900"
+                              />
+                            </div>
+                            <div className="sm:col-span-1 flex justify-end">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveMedication(mIdx)}
+                                className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Follow up & Advice */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-1.5">Practitioner Notes</label>
-                        <textarea
-                          rows={4}
-                          value={doctorNotes}
-                          onChange={(e) => setDoctorNotes(e.target.value)}
-                          placeholder="Enter symptoms verified, history, and examination findings..."
-                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#002F6C]/20 focus:border-[#002F6C] text-slate-700 text-xs font-medium"
-                          disabled={saving || selectedSession.status === 'completed'}
+                        <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1.5">
+                          Follow-up & Patient Instructions
+                        </label>
+                        <input
+                          type="text"
+                          value={followUp}
+                          onChange={(e) => setFollowUp(e.target.value)}
+                          placeholder="e.g. Review in OPD after 5 days if pain persists."
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-900 text-slate-700 text-xs font-medium"
                         />
                       </div>
+
                       <div>
-                        <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-1.5">Prescription & Advice</label>
-                        <textarea
-                          rows={4}
-                          value={prescription}
-                          onChange={(e) => setPrescription(e.target.value)}
-                          placeholder="e.g. Paracetamol 650mg TDS x 3 days..."
-                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#002F6C]/20 focus:border-[#002F6C] text-slate-700 text-xs font-medium"
-                          disabled={saving || selectedSession.status === 'completed'}
+                        <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1.5">
+                          Clinical Examination & Physician Notes
+                        </label>
+                        <input
+                          type="text"
+                          value={doctorNotes}
+                          onChange={(e) => setDoctorNotes(e.target.value)}
+                          placeholder="e.g. Abdomen soft, mild epigastric tenderness noted."
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-900 text-slate-700 text-xs font-medium"
                         />
                       </div>
                     </div>
 
-                    {selectedSession.status !== 'completed' && (
-                      <button
-                        type="submit"
-                        disabled={saving}
-                        className="w-full mt-4 py-3 bg-[#002F6C] hover:bg-[#002F6C]/90 text-white rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2 shadow-md shadow-[#002F6C]/10"
-                      >
-                        {saving ? 'Submitting clinical records...' : 'Link & Save Medical Record'}
-                        <ChevronRight className="w-5 h-5" />
-                      </button>
-                    )}
+                    <button
+                      type="submit"
+                      disabled={saving}
+                      className="w-full py-3.5 bg-gradient-to-r from-blue-900 to-indigo-900 hover:from-blue-950 hover:to-indigo-950 text-white rounded-xl text-sm font-black transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-950/20 active:scale-98"
+                    >
+                      <CheckSquare className="w-5 h-5 text-emerald-400" />
+                      <span>{saving ? 'Submitting & Linking Records...' : 'Save & Issue Prescription to Medical Records'}</span>
+                    </button>
                   </form>
+                </div>
                 </div>
               </div>
             ) : (

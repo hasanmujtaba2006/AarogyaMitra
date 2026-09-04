@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { 
   Clock, 
   Calendar, 
@@ -35,32 +35,63 @@ export default function VisitsTimelineView({
   const { t } = useLanguage()
   const [expandedVisitId, setExpandedVisitId] = useState<string | null>('active_today')
   const [selectedVisitForPrint, setSelectedVisitForPrint] = useState<any | null>(null)
+  const [savedConsultations, setSavedConsultations] = useState<any[]>([])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('aarogya_medical_records')
+        if (raw) {
+          setSavedConsultations(JSON.parse(raw))
+        }
+      } catch (e) {}
+    }
+  }, [])
 
   const toggleExpand = (id: string) => {
     setExpandedVisitId(prev => prev === id ? null : id)
   }
 
-  // Timeline visits: only genuine active session on record
-  const visits = [
-    ...(currentSessionId ? [{
-      id: 'active_today',
-      date: t('Today (Active)', 'आज (सक्रिय)', 'இன்று (செயலில்)', 'ఈరోజు (యాక్టివ్)'),
-      timestamp: 'Just now',
-      facility: t('District Hospital OPD Kiosk', 'जिला अस्पताल ओपीडी कियोस्क', 'மாவட்ட மருத்துவமனை கியோஸ்க்', 'జిల్లా ఆసుపత్రి కియోస్క్'),
-      department: t('General OPD / Triage AI', 'सामान्य ओपीडी / ट्राइएज एआई', 'பொது OPD / AI', 'జనరల్ OPD / AI'),
-      doctor: t('Dr. AI AarogyaMitra & OPD Duty Medical Officer', 'डॉ. एआई आरोग्यमित्र व ओपीडी मेडिकल ऑफिसर', 'மருத்துவர் AI & OPD மருத்துவர்', 'డాక్టర్ AI & OPD వైద్యులు'),
-      complaint: currentSummary ? currentSummary.slice(0, 100) + '...' : t('Intake & Pre-consultation symptom screening', 'लक्षणों की प्रारंभिक जांच व पर्चा', 'அறிகுறிகள் பரிசோதனை', 'లక్షణాల స్క్రీనింగ్'),
-      diagnosis: t('Pre-consultation clinical intake recorded', 'प्रारंभिक ओपीडी परामर्श जारी', 'பரிசோதனை பதிவு செய்யப்பட்டது', 'ప్రాథమిక సంప్రదింపు రికార్డ్ చేయబడింది'),
-      prescription: [
-        t('Pending doctor examination', 'डॉक्टर जांच प्रतीक्षारत', 'மருத்துவர் பரிசோதனை நிலுவையில் உள்ளது', 'వైద్యుల పరీక్ష పెండింగ్‌లో ఉంది')
-      ],
-      notes: currentSummary || t('Patient arrived at OPD Kiosk for health screening and queue intake.', 'रोगी ओपीडी कियोस्क पर स्वास्थ्य परामर्श हेतु उपस्थित हुआ।', 'நோயாளி மருத்துவமனைக்கு வந்துள்ளார்.', 'రోగి ఆరోగ్య పరీక్ష కోసం కియోస్క్ వద్దకు వచ్చారు.'),
-      token: 'OPD-407',
-      careContext: `CARE-CTX-${currentSessionId ? currentSessionId.slice(-6).toUpperCase() : '982104'}`,
-      status: t('Active Session', 'सक्रिय सत्र', 'செயலில் உள்ள அமர்வு', 'యాక్టివ్ సెషన్'),
-      statusColor: 'bg-emerald-500 text-white'
-    }] : [])
-  ]
+  // Timeline visits: genuine saved consultations + active session
+  const consultationVisits = savedConsultations.map((cons, idx) => ({
+    id: cons.session_id || `cons_${idx}`,
+    date: cons.date || t('Recent Visit', 'हाल की विज़िट', 'சமீபத்திய வருகை', 'ఇటీవలి సందర్శన'),
+    timestamp: cons.time || 'Completed',
+    facility: t('District Hospital OPD Kiosk', 'जिला अस्पताल ओपीडी कियोस्क', 'மாவட்ட மருத்துவமனை கியோஸ்க்', 'జిల్లా ఆసుపత్రి కియోస్క్'),
+    department: cons.doctor?.specialty || t('Specialist OPD', 'विशेषज्ञ ओपीडी', 'சிறப்பு OPD', 'స్పెషలిస్ట్ OPD'),
+    doctor: cons.doctor ? `${cons.doctor.name} (${cons.doctor.post || cons.doctor.specialty})` : t('Specialist Doctor', 'विशेषज्ञ चिकित्सक', 'சிறப்பு மருத்துவர்', 'నిపుణులైన వైద్యులు'),
+    complaint: cons.chief_complaint || t('Clinical Intake & Symptom Screening', 'लक्षणों की जांच व परामर्श', 'அறிகுறி பரிசோதனை', 'లక్షణాల స్క్రీనింగ్'),
+    diagnosis: cons.confirmed_diagnosis || (cons.clinical_history?.provisional_diagnosis || t('Consultation Completed', 'परामर्श पूर्ण', 'ஆலோசனை முடிந்தது', 'సంప్రదింపు పూర్తయింది')),
+    prescription: cons.medications && cons.medications.length > 0 
+      ? cons.medications.map((m: any) => `${m.name} - ${m.dosage || ''} (${m.frequency || ''} x ${m.duration || ''})`.trim())
+      : [t('Prescription recorded on file', 'पर्चा रिकॉर्ड में दर्ज', 'பரிந்துரை கோப்பில் பதிவு செய்யப்பட்டது', 'ప్రిస్క్రిప్షన్ ఫైల్‌లో నమోదు చేయబడింది')],
+    notes: cons.doctor_advice || cons.clinical_history?.executive_summary || t('Consultation completed successfully.', 'परामर्श सफलतापूर्वक पूर्ण हुआ।', 'ஆலோசனை வெற்றிகரமாக முடிந்தது.', 'సంప్రదింపు విజయవంతంగా పూర్తయింది.'),
+    token: cons.token || 'OPD-101',
+    careContext: `CARE-CTX-${(cons.session_id ? cons.session_id.slice(-6) : '882190').toUpperCase()}`,
+    status: cons.medications?.length ? t('Prescription Issued', 'दवा पर्चा जारी', 'பரிந்துரை வழங்கப்பட்டது', 'ప్రిస్క్రిప్షన్ జారీ చేయబడింది') : t('Consultation Done', 'परामर्श पूर्ण', 'ஆலோசனை முடிந்தது', 'సంప్రదింపు పూర్తయింది'),
+    statusColor: 'bg-blue-600 text-white'
+  }))
+
+  const activeVisit = currentSessionId ? [{
+    id: 'active_today',
+    date: t('Today (Active)', 'आज (सक्रिय)', 'இன்று (செயலில்)', 'ఈరోజు (యాక్టివ్)'),
+    timestamp: 'Just now',
+    facility: t('District Hospital OPD Kiosk', 'जिला अस्पताल ओपीडी कियोस्क', 'மாவட்ட மருத்துவமனை கியோஸ்க்', 'జిల్లా ఆసుపత్రి కియోస్క్'),
+    department: t('General OPD / Triage AI', 'सामान्य ओपीडी / ट्राइएज एआई', 'பொது OPD / AI', 'జనరల్ OPD / AI'),
+    doctor: t('Dr. AI AarogyaMitra & OPD Duty Medical Officer', 'डॉ. एआई आरोग्यमित्र व ओपीडी मेडिकल ऑफिसर', 'மருத்துவர் AI & OPD மருத்துவர்', 'డాక్టర్ AI & OPD వైద్యులు'),
+    complaint: currentSummary ? currentSummary.slice(0, 100) + '...' : t('Intake & Pre-consultation symptom screening', 'लक्षणों की प्रारंभिक जांच व पर्चा', 'அறிகுறிகள் பரிசோதனை', 'లక్షణాల స్క్రీనింగ్'),
+    diagnosis: t('Pre-consultation clinical intake recorded', 'प्रारंभिक ओपीडी परामर्श जारी', 'பரிசோதனை பதிவு செய்யப்பட்டது', 'ప్రాథమిక సంప్రదింపు రికార్డ్ చేయబడింది'),
+    prescription: [
+      t('Pending doctor examination', 'डॉक्टर जांच प्रतीक्षारत', 'மருத்துவர் பரிசோதனை நிலுவையில் உள்ளது', 'వైద్యుల పరీక్ష పెండింగ్‌లో ఉంది')
+    ],
+    notes: currentSummary || t('Patient arrived at OPD Kiosk for health screening and queue intake.', 'रोगी ओपीडी कियोस्क पर स्वास्थ्य परामर्श हेतु उपस्थित हुआ।', 'நோயாளி மருத்துவமனைக்கு வந்துள்ளார்.', 'రోగి ఆరోగ్య పరీక్ష కోసం కియోస్క్ వద్దకు వచ్చారు.'),
+    token: 'OPD-407',
+    careContext: `CARE-CTX-${currentSessionId ? currentSessionId.slice(-6).toUpperCase() : '982104'}`,
+    status: t('Active Session', 'सक्रिय सत्र', 'செயலில் உள்ள அமர்வு', 'యాక్టివ్ సెషన్'),
+    statusColor: 'bg-emerald-500 text-white'
+  }] : []
+
+  const visits = [...activeVisit, ...consultationVisits]
 
   const handlePrint = (v: any) => {
     setSelectedVisitForPrint(v)
@@ -228,7 +259,7 @@ export default function VisitsTimelineView({
                           </span>
 
                           <ul className="space-y-1.5">
-                            {v.prescription.map((rxItem, i) => (
+                            {v.prescription.map((rxItem: string, i: number) => (
                               <li key={i} className="flex items-center gap-2 text-xs font-bold text-slate-700 bg-slate-50 p-2 rounded-xl border border-slate-100">
                                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                                 <span>{rxItem}</span>

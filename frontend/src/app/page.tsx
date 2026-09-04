@@ -29,6 +29,8 @@ import AbhaCard, { PatientInfo } from '@/components/AbhaCard'
 import ProfileSection from '@/components/ProfileSection'
 import MedicalRecordsView, { ScannedPrescriptionDetails } from '@/components/MedicalRecordsView'
 import VisitsTimelineView from '@/components/VisitsTimelineView'
+import StructuredClinicalSummaryCard, { StructuredClinicalData } from '@/components/StructuredClinicalSummaryCard'
+import DoctorSelectionAndQueue from '@/components/DoctorSelectionAndQueue'
 import { LanguageCode, useLanguage } from '@/context/LanguageContext'
 import { transliterateName } from '@/lib/transliterate'
 
@@ -36,6 +38,7 @@ interface Message {
   role: 'user' | 'assistant';
   message: string;
   translated_message?: string;
+  spoken_language?: string;
 }
 
 type PatientTab = 'profile' | 'scan_prescription' | 'doctor_ai' | 'medical_record' | 'timeline'
@@ -57,6 +60,7 @@ export default function KioskPage() {
   const [messages, setMessages] = useState<Message[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
   const [sessionSummary, setSessionSummary] = useState('')
+  const [structuredSummary, setStructuredSummary] = useState<StructuredClinicalData | null>(null)
   const [triageAlerted, setTriageAlerted] = useState(false)
   const [ocrText, setOcrText] = useState('')
   const [scannedDetails, setScannedDetails] = useState<ScannedPrescriptionDetails | null>(null)
@@ -200,11 +204,18 @@ export default function KioskPage() {
       const data = await res.json()
       
       // Update chat message history with LLM response
+      const assistantSpokenLang = data.spoken_language || language
       setMessages(prev => [...prev, {
         role: 'assistant',
         message: data.response,
-        translated_message: data.translated_response
+        translated_message: data.translated_response,
+        spoken_language: assistantSpokenLang
       }])
+
+      // Auto-sync frontend language if user spoke in Hindi/Tamil/Telugu
+      if (assistantSpokenLang && assistantSpokenLang !== language) {
+        setLanguage(assistantSpokenLang as LanguageCode)
+      }
 
       // Check if triage was triggered
       if (data.triage_alerted) {
@@ -214,32 +225,70 @@ export default function KioskPage() {
       // Check if session completed
       if (data.status === 'completed') {
         setSessionSummary(data.summary || '')
+        if (data.structured_summary) {
+          setStructuredSummary(data.structured_summary)
+        }
         setIsConsultationFinished(true)
       }
 
     } catch (err) {
       console.error(err)
-      // Fallback Mock dialogue for validation
+      // Fallback Mock dialogue: symptom-aware and dialect-aware
       setTimeout(() => {
-        const mockResponses: Record<string, string> = {
-          en: "Thank you for the information. Do you feel any chest pain, breathing difficulty, or radiating discomfort?",
-          hi: "जानकारी के लिए धन्यवाद। क्या आपको सीने में दर्द, सांस लेने में तकलीफ या घबराहट महसूस हो रही है?",
-          ta: "தகவலுக்கு நன்றி. உங்களுக்கு மார்பு வலி, மூச்சுத் திணறல் அல்லது அசௌகரியம் இருக்கிறதா?",
-          te: "సమాచారానికి ధన్యవాదాలు. మీకు ఛాతీ నొప్పి, శ్వాస తీసుకోవడంలో ఇబ్బంది లేదా అసౌకర్యంగా ఉందా?"
+        const lowerText = text.toLowerCase()
+        const isHindi = /[\u0900-\u097F]/.test(text) || /\b(sir|sar|dard|pet|bukhar|khasi|khansi|gala|gale|ulti|dast|hai|hain|ho|raha|rahi|nahi|theek|doctor|mere|meri|mujhe|tez|chot)\b/.test(lowerText)
+        const isTamil = /[\u0B80-\u0BFF]/.test(text) || /\b(vali|kaichal|irumal|sali|vayiru|mayakkam|illai)\b/.test(lowerText)
+        const isTelugu = /[\u0C00-\u0C7F]/.test(text) || /\b(noppi|kadupu|jwaram|daggu|ledu)\b/.test(lowerText)
+
+        let targetLang = language
+        if (isHindi) targetLang = 'hi'
+        else if (isTamil) targetLang = 'ta'
+        else if (isTelugu) targetLang = 'te'
+
+        let mockResponse = ""
+        let mockEnglish = ""
+
+        if (targetLang === 'hi') {
+          if (lowerText.includes('sir') || lowerText.includes('sar') || text.includes('सिर') || lowerText.includes('head')) {
+            mockResponse = "सिरदर्द के बारे में जानकर मुझे खेद है। यह दर्द कब से शुरू हुआ है और 1 से 10 के पैमाने पर कितना तेज है?"
+            mockEnglish = "Sorry to hear about your headache. When did it start and how severe is it on a scale of 1 to 10?"
+          } else if (lowerText.includes('pet') || text.includes('पेट') || lowerText.includes('stomach')) {
+            mockResponse = "पेट की तकलीफ के बारे में जानकर खेद हुआ। क्या आपको उल्टी या दस्त की शिकायत है, और यह कब से शुरू हुआ?"
+            mockEnglish = "Sorry to hear about your stomach discomfort. Are you having vomiting or loose motions, and when did this start?"
+          } else if (lowerText.includes('bukhar') || text.includes('बुखार') || lowerText.includes('fever')) {
+            mockResponse = "बुखार के बारे में जानकर खेद हुआ। क्या आपको ठंड या कंपकंपी भी लग रही है, और यह कितने दिनों से है?"
+            mockEnglish = "Sorry to hear you have fever. Do you have chills or shivering, and how many days has it been?"
+          } else {
+            mockResponse = "आपकी तकलीफ के बारे में जानकर खेद हुआ। कृपया बताएं कि यह लक्षण कब से शुरू हुआ है?"
+            mockEnglish = "Sorry to hear about your discomfort. Could you please share when these symptoms started?"
+          }
+        } else if (targetLang === 'ta') {
+          mockResponse = "உங்கள் உடல்நலப் பிரச்சனை பற்றி விவரமாக கூறுங்கள், இது எப்போது தொடங்கியது?"
+          mockEnglish = "Please share details about your symptoms and when they started."
+        } else if (targetLang === 'te') {
+          mockResponse = "మీ అనారోగ్య సమస్య వివరాలను మరియు ఇది ఎప్పుడు ప్రారంభమైందో దయచేసి చెప్పండి?"
+          mockEnglish = "Please share details about your symptoms and when they started."
+        } else {
+          mockResponse = "Thank you for the information. Where exactly is the discomfort located, and when did it start?"
+          mockEnglish = mockResponse
         }
-        
-        const mockResponse = mockResponses[language] || mockResponses['en']
+
         setMessages(prev => [...prev, {
           role: 'assistant',
-          message: mockResponse,
-          translated_message: mockResponse
+          message: mockEnglish,
+          translated_message: mockResponse,
+          spoken_language: targetLang
         }])
+
+        if (targetLang !== language) {
+          setLanguage(targetLang as LanguageCode)
+        }
         
         // Mock triage if chest pain is mentioned
-        if (text.toLowerCase().includes('chest pain') || text.includes('दर्द') || text.includes('வலி') || text.includes('నొప్పి')) {
+        if (lowerText.includes('chest pain') || text.includes('दर्द') || text.includes('வலி') || text.includes('నొప్పి')) {
           setTriageAlerted(true)
         }
-      }, 1000)
+      }, 800)
     } finally {
       setIsProcessing(false)
     }
@@ -257,6 +306,9 @@ export default function KioskPage() {
       if (res.ok) {
         const data = await res.json()
         setSessionSummary(data.summary || 'Clinical intake summary compiled.')
+        if (data.structured_summary) {
+          setStructuredSummary(data.structured_summary)
+        }
         setIsConsultationFinished(true)
       } else {
         setIsConsultationFinished(true)
@@ -273,6 +325,7 @@ export default function KioskPage() {
     setPatient(null)
     setMessages([])
     setSessionSummary('')
+    setStructuredSummary(null)
     setTriageAlerted(false)
     setOcrText('')
     setScannedDetails(null)
@@ -639,38 +692,50 @@ export default function KioskPage() {
                 <div className="flex flex-col items-center max-w-4xl mx-auto w-full space-y-4">
                   {/* Completed summary or live dialogue */}
                   {isConsultationFinished ? (
-                    <div className="w-full max-w-2xl bg-white rounded-2xl sm:rounded-3xl border-2 sm:border-4 border-emerald-600 shadow-xl sm:shadow-2xl p-5 sm:p-8 text-center space-y-4 sm:space-y-6">
-                      <CheckCircle className="w-14 h-14 sm:w-20 sm:h-20 text-emerald-600 mx-auto" />
-                      <div>
-                        <h2 className="text-2xl sm:text-3xl font-black text-emerald-900">
-                          {t('Consultation Intake Completed!', 'परामर्श व पर्ची पूर्ण!', 'ஆலோசனை முடிந்தது!', 'సంప్రదింపు పూర్తయింది!')}
-                        </h2>
-                        <p className="text-slate-600 font-bold text-sm sm:text-base mt-1.5 sm:mt-2">
-                          {t('Your symptoms have been structured into clinical notes & FHIR bundle.', 'आपके लक्षणों का क्लिनिकल सारांश तैयार कर लिया गया है।', 'உங்கள் மருத்துவக் குறிப்புகள் தயாராக உள்ளன.', 'మీ లక్షణాలు క్లినికల్ నోట్స్‌గా మార్చబడ్డాయి.')}
-                        </p>
-                      </div>
-
-                      {sessionSummary && (
-                        <div className="bg-slate-50 border-2 border-slate-200 rounded-xl sm:rounded-2xl p-3 sm:p-4 text-left font-mono text-xs sm:text-sm text-slate-800 whitespace-pre-wrap max-h-60 overflow-y-auto">
-                          {sessionSummary}
+                    <div className="w-full max-w-4xl space-y-6">
+                      {/* Top success announcement banner */}
+                      <div className="bg-gradient-to-r from-emerald-600 via-teal-700 to-blue-900 text-white p-5 sm:p-7 rounded-2xl sm:rounded-3xl shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
+                        <div className="flex items-center gap-3 sm:gap-4">
+                          <div className="p-3 bg-white/20 backdrop-blur-md rounded-2xl shrink-0">
+                            <CheckCircle2 className="w-8 h-8 sm:w-10 sm:h-10 text-emerald-200" />
+                          </div>
+                          <div>
+                            <span className="bg-emerald-500/40 text-emerald-100 text-[10px] sm:text-xs font-black uppercase px-2.5 py-0.5 rounded-full border border-emerald-300/30 tracking-wider">
+                              {t('Consultation Intake Completed', 'क्लिनिकल परामर्श संपन्न', 'ஆலோசனை முடிந்தது', 'క్లినికల్ సంప్రదింపు పూర్తయింది')}
+                            </span>
+                            <h2 className="text-xl sm:text-2xl font-black text-white mt-1">
+                              {t('Symptoms Structured into Clinical History', 'लक्षणों का क्लिनिकल सारांश तैयार है', 'மருத்துவ வரலாறு தயாராக உள்ளது', 'క్లినికల్ చరిత్ర సిద్ధంగా ఉంది')}
+                            </h2>
+                            <p className="text-xs sm:text-sm text-emerald-100 mt-0.5">
+                              {t('Choose a specialist doctor below to generate your OPD token and join the live queue.', 'ओपीडी टोकन प्राप्त करने और डॉक्टर की कतार में शामिल होने के लिए नीचे डॉक्टर चुनें।', 'OPD டோக்கன் பெற கீழே மருத்துவரைத் தேர்ந்தெடுக்கவும்.', 'OPD టోకెన్ పొందడానికి క్రింద ఉన్న వైద్యుడిని ఎంచుకోండి.')}
+                            </p>
+                          </div>
                         </div>
-                      )}
 
-                      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
                         <button
                           onClick={() => setActiveTab('medical_record')}
-                          className="h-12 sm:h-16 px-5 sm:px-6 bg-blue-900 hover:bg-blue-950 text-white font-black text-sm sm:text-lg rounded-xl sm:rounded-2xl shadow-lg flex items-center justify-center gap-2"
+                          className="h-11 sm:h-12 px-5 bg-white hover:bg-slate-100 text-slate-900 font-extrabold text-xs sm:text-sm rounded-xl sm:rounded-2xl shadow-md flex items-center gap-2 shrink-0 transition-all"
                         >
-                          <FolderHeart className="w-5 h-5 sm:w-6 sm:h-6" />
+                          <FolderHeart className="w-4 h-4 text-blue-900" />
                           <span>{t('View in Medical Records', 'मेडिकल रिकॉर्ड में देखें', 'மருத்துவப் பதிவுகள்', 'మెడికల్ రికార్డులు')}</span>
                         </button>
-                        <button
-                          onClick={handleRestart}
-                          className="h-12 sm:h-16 px-5 sm:px-6 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm sm:text-lg rounded-xl sm:rounded-2xl shadow-lg flex items-center justify-center gap-2"
-                        >
-                          <span>{t('New Patient Session', 'नया मरीज सत्र', 'புதிய அமர்வு', 'కొత్త సెషన్')}</span>
-                        </button>
                       </div>
+
+                      {/* 1. Structured Clinical History Executive Card */}
+                      <StructuredClinicalSummaryCard
+                        data={structuredSummary}
+                        rawText={sessionSummary}
+                      />
+
+                      {/* 2. Doctor Directory, Selection according to illness, Queue Token & Tracker */}
+                      <DoctorSelectionAndQueue
+                        sessionId={sessionId}
+                        patientName={patient?.full_name}
+                        abhaId={patient?.abha_number || patient?.abha_address}
+                        structuredSummary={structuredSummary}
+                        rawSummary={sessionSummary}
+                        onViewMedicalRecords={() => setActiveTab('medical_record')}
+                      />
                     </div>
                   ) : (
                     <div className="w-full flex flex-col items-center">
@@ -679,6 +744,7 @@ export default function KioskPage() {
                         messages={messages}
                         onSendMessage={submitMessageToChat}
                         isProcessing={isProcessing}
+                        onLanguageChange={setLanguage}
                       />
                       
                       <div className="mt-3 sm:mt-4 flex items-center justify-center w-full">

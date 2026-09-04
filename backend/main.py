@@ -43,10 +43,12 @@ def migrate_database():
                 conn.execute(text("ALTER TABLE abha_users ADD COLUMN state VARCHAR(50)"))
             if "pincode" not in abha_cols:
                 conn.execute(text("ALTER TABLE abha_users ADD COLUMN pincode VARCHAR(10)"))
-            if "auth_method" not in abha_cols:
-                conn.execute(text("ALTER TABLE abha_users ADD COLUMN auth_method VARCHAR(30) DEFAULT 'DEMO'"))
-            if "verification_status" not in abha_cols:
-                conn.execute(text("ALTER TABLE abha_users ADD COLUMN verification_status VARCHAR(20) DEFAULT 'VERIFIED'"))
+            if "blood_group" not in abha_cols:
+                conn.execute(text("ALTER TABLE abha_users ADD COLUMN blood_group VARCHAR(10) DEFAULT 'B+'"))
+            if "allergies" not in abha_cols:
+                conn.execute(text("ALTER TABLE abha_users ADD COLUMN allergies TEXT DEFAULT 'No Known Allergies'"))
+            if "profile_photo" not in abha_cols:
+                conn.execute(text("ALTER TABLE abha_users ADD COLUMN profile_photo TEXT"))
             conn.commit()
 
 try:

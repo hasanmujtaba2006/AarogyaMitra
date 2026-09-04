@@ -40,6 +40,10 @@ for attempt in range(1, max_retries + 1):
         print(f"Database: Connected to primary database successfully (Attempt {attempt}).")
         break
     except Exception as e:
+        err_str = str(e).lower()
+        if "psycopg" in err_str or "no module" in err_str:
+            print(f"Database Notice: PostgreSQL driver not installed ({e}). Falling back to local SQLite immediately.")
+            break
         if attempt < max_retries:
             print(f"Database Notice: Primary connection attempt {attempt} failed ({e}). Retrying in 1.5s...")
             time.sleep(1.5)

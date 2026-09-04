@@ -107,10 +107,27 @@ class PatientSessionResponse(PatientSessionBase):
         from_attributes = True
 
 class ClinicalUpdateRequest(BaseModel):
-    doctor_notes: str
-    doctor_prescription: str
+    doctor_notes: Optional[str] = ""
+    doctor_prescription: Optional[str] = ""
+    notes: Optional[str] = None
+    confirmed_diagnosis: Optional[str] = None
+    diagnosis: Optional[str] = None
+    medications: Optional[List[Dict[str, Any]]] = None
+    follow_up: Optional[str] = None
 
 class SessionLanguageUpdate(BaseModel):
     session_id: str
     language: str
+
+class DoctorQueueRequest(BaseModel):
+    session_id: str
+    doctor_id: str
+    doctor_name: str
+    doctor_specialty: str
+    doctor_post: str
+    doctor_room: str
+    doctor_fee: Optional[str] = "₹0 (Free Govt Kiosk)"
+
+class CallPatientRequest(BaseModel):
+    session_id: str
 

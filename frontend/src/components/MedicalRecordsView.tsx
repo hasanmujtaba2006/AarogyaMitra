@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { 
   FolderHeart, 
   Pill, 
@@ -65,6 +65,20 @@ export default function MedicalRecordsView({
   const [activeSubTab, setActiveSubTab] = useState<'all' | 'meds' | 'reports' | 'prescriptions'>('all')
   const [showRawOcr, setShowRawOcr] = useState(false)
 
+  // Load saved consultations and doctor prescriptions from localStorage
+  const [savedConsultations, setSavedConsultations] = useState<any[]>([])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('aarogya_medical_records')
+        if (raw) {
+          setSavedConsultations(JSON.parse(raw))
+        }
+      } catch (e) {}
+    }
+  }, [])
+
   // Dynamically extract and structure medications from genuinely scanned prescription
   const scannedMedications = (scannedDetails?.medications || []).map((med, idx) => ({
     id: `scanned_med_${idx}`,
@@ -80,8 +94,26 @@ export default function MedicalRecordsView({
     isScanned: true
   }))
 
-  // Only real medications on record
-  const allMedications = [...scannedMedications]
+  // Extract medications from saved doctor consultations
+  const consultationMedications = savedConsultations.flatMap((cons, cIdx) => {
+    const meds = cons.medications || []
+    return meds.map((m: any, mIdx: number) => ({
+      id: `cons_med_${cIdx}_${mIdx}`,
+      name: m.name,
+      generic: m.name,
+      dosage: m.dosage || 'As directed',
+      purpose: m.instructions || cons.confirmed_diagnosis || cons.chief_complaint || t('Prescribed OPD Therapy', 'ओपीडी परामर्श उपचार', 'பரிந்துரைக்கப்பட்ட சிகிச்சை', 'సూచించిన చికిత్స'),
+      prescribedBy: cons.doctor
+        ? `${cons.doctor.name} (${cons.doctor.post || cons.doctor.specialty}) • Room ${cons.doctor.room}`
+        : 'Consulting Doctor',
+      startDate: cons.date || t('Today', 'आज', 'இன்று', 'ఈరోజు'),
+      status: 'Active',
+      isScanned: false
+    }))
+  })
+
+  // All medications on record
+  const allMedications = [...consultationMedications, ...scannedMedications]
 
   // Dynamic evaluation of point-of-care Random Blood Sugar (RBS) if present on scanned record
   const rbsNum = scannedDetails?.vitals?.rbs ? parseFloat(scannedDetails.vitals.rbs.replace(/[^0-9.]/g, '')) : null
@@ -104,20 +136,38 @@ export default function MedicalRecordsView({
     isScanned: true
   }] : []
 
-  // Prescriptions history (only genuine digitized prescriptions from active session or ABHA)
-  const prescriptionsList = (scannedDetails || ocrText) ? [{
-    id: 'current_ocr',
-    title: scannedDetails?.hospital
-      ? scannedDetails.hospital
-      : t('Newly Scanned Prescription', 'हाल ही में स्कैन किया गया पर्चा', 'புதிதாக ஸ்கேன் செய்யப்பட்ட மருந்துச்சீட்டு', 'కొత్తగా స్కాన్ చేసిన ప్రిస్క్రిప్షన్'),
-    doctor: scannedDetails?.doctor_reg
-      ? `Dr. Reg #${scannedDetails.doctor_reg}`
-      : t('Self-Scanned at Kiosk', 'कियोस्क पर स्वयं स्कैन किया गया', 'கியோஸ்கில் ஸ்கேன் செய்யப்பட்டது', 'కియోస్క్‌లో స్కాన్ చేయబడింది'),
-    date: scannedDetails?.date || t('Today', 'आज', 'இன்று', 'ఈరోజు'),
-    notes: ocrText || scannedDetails?.extracted_markdown || '',
-    badge: t('Current Session • Digitized', 'वर्तमान सत्र • डिजिटाइज़्ड', 'தற்போதைய அமர்வு • டிஜிட்டல்', 'ప్రస్తుత సెషన్ • డిజిటలైజ్ చేయబడింది'),
-    details: scannedDetails
-  }] : []
+  // Consultation slips from doctor consultations
+  const consultationSlips = savedConsultations.map((cons, idx) => ({
+    id: `consultation_${cons.id || idx}`,
+    title: cons.doctor
+      ? `${cons.doctor.name} - ${cons.doctor.specialty}`
+      : t('OPD Clinical Consultation', 'ओपीडी क्लिनिकल परामर्श', 'OPD ஆலோசனை', 'OPD సంప్రదింపు'),
+    doctor: cons.doctor
+      ? `${cons.doctor.name} (${cons.doctor.post}) • Room ${cons.doctor.room}`
+      : 'Consulting Physician',
+    date: cons.date || 'Today',
+    notes: cons.doctor_prescription || cons.raw_summary || '',
+    badge: cons.token ? `Token: ${cons.token} • ${cons.status || 'Active'}` : 'OPD Consultation',
+    consultationData: cons
+  }))
+
+  // Prescriptions history (combines saved consultations + scanned prescriptions)
+  const prescriptionsList = [
+    ...consultationSlips,
+    ...(scannedDetails || ocrText ? [{
+      id: 'current_ocr',
+      title: scannedDetails?.hospital
+        ? scannedDetails.hospital
+        : t('Newly Scanned Prescription', 'हाल ही में स्कैन किया गया पर्चा', 'புதிதாக ஸ்கேன் செய்யப்பட்ட மருந்துச்சீட்டு', 'కొత్తగా స్కాన్ చేసిన ప్రిస్క్రిప్షన్'),
+      doctor: scannedDetails?.doctor_reg
+        ? `Dr. Reg #${scannedDetails.doctor_reg}`
+        : t('Self-Scanned at Kiosk', 'कियोस्क पर स्वयं स्कैन किया गया', 'கியோஸ்கில் ஸ்கேன் செய்யப்பட்டது', 'కియోస్క్‌లో స్కాన్ చేయబడింది'),
+      date: scannedDetails?.date || t('Today', 'आज', 'இன்று', 'ఈరోజు'),
+      notes: ocrText || scannedDetails?.extracted_markdown || '',
+      badge: t('Current Session • Digitized', 'वर्तमान सत्र • डिजिटाइज़्ड', 'தற்போதைய அமர்வு • டிஜிட்டல்', 'ప్రస్తుత సెషన్ • డిజిటలైజ్ చేయబడింది'),
+      details: scannedDetails
+    }] : [])
+  ]
 
   return (
     <div className="w-full max-w-5xl mx-auto space-y-6">
@@ -486,6 +536,117 @@ export default function MedicalRecordsView({
                       {showRawOcr && (
                         <div className="bg-slate-900 text-slate-200 p-4 rounded-2xl text-xs font-mono whitespace-pre-wrap max-h-60 overflow-y-auto">
                           {rx.notes}
+                        </div>
+                      )}
+                    </div>
+                  )
+                }
+
+                if ((rx as any).consultationData) {
+                  const cons = (rx as any).consultationData
+                  const meds = cons.medications || []
+                  const isCompleted = cons.status === 'Consultation Completed' || cons.doctor_prescription
+
+                  return (
+                    <div
+                      key={rx.id}
+                      className="p-3.5 sm:p-6 rounded-2xl sm:rounded-3xl border-2 border-blue-600 bg-gradient-to-br from-blue-50/40 via-white to-indigo-50/30 shadow-md space-y-3 sm:space-y-4"
+                    >
+                      {/* Doctor & Facility Header */}
+                      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 border-b border-blue-100 pb-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="bg-blue-900 text-white text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full shadow-sm">
+                              {cons.token ? `Token: ${cons.token}` : 'OPD Consultation'}
+                            </span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              isCompleted ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                            }`}>
+                              {cons.status || 'Active Consultation'}
+                            </span>
+                            <span className="text-xs font-bold text-slate-400 font-mono">
+                              {cons.date || 'Today'}
+                            </span>
+                          </div>
+                          <h4 className="text-base sm:text-lg font-black text-slate-900 mt-1">
+                            {cons.doctor?.name || 'Consulting Physician'}
+                          </h4>
+                          <p className="text-xs text-slate-500">
+                            {cons.doctor?.post || cons.doctor?.specialty} • Room {cons.doctor?.room || 'OPD'}
+                          </p>
+                        </div>
+
+                        {cons.doctor?.fee && (
+                          <div className="text-left sm:text-right">
+                            <span className="text-[11px] font-bold text-slate-500 block">{t('Consultation Fee', 'परामर्श शुल्क', 'கட்டணம்', 'ఫీజు')}</span>
+                            <span className="text-xs font-mono font-black text-emerald-800 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200 inline-block mt-0.5">
+                              {cons.doctor.fee}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Chief Complaint & Diagnosis */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                        <div className="bg-white/80 p-3 rounded-xl border border-slate-200/80 shadow-xs">
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block">{t('Patient Name', 'रोगी का नाम', 'நோயாளி பெயர்', 'రోగి పేరు')}</span>
+                          <p className="text-sm font-black text-slate-800">{cons.patient_name || patient.full_name}</p>
+                          {cons.token && <span className="text-[10px] font-mono text-blue-900 font-bold block">Token: {cons.token}</span>}
+                        </div>
+
+                        <div className="bg-white/80 p-3 rounded-xl border border-slate-200/80 shadow-xs">
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block">{t('Chief Complaint', 'मुख्य लक्षण', 'அறிகுறிகள்', 'ప్రధాన లక్షణాలు')}</span>
+                          <p className="text-sm font-extrabold text-slate-800 capitalize">{cons.chief_complaint || 'General Consultation'}</p>
+                        </div>
+
+                        <div className="bg-blue-50/80 p-3 rounded-xl border border-blue-200 shadow-xs sm:col-span-2">
+                          <span className="text-[10px] uppercase font-bold text-blue-700 block">{t('Confirmed Diagnosis / Clinical Assessment', 'पुष्टीकृत निदान / बीमारी', 'நோய் கண்டறிதல்', 'వ్యాధి నిర్ధారణ')}</span>
+                          <p className="text-sm font-black text-blue-950">{cons.confirmed_diagnosis || cons.provisional_diagnosis || 'Under Clinical Evaluation'}</p>
+                        </div>
+                      </div>
+
+                      {/* Prescribed Medications */}
+                      {meds.length > 0 && (
+                        <div className="space-y-2">
+                          <span className="text-xs font-extrabold text-slate-700 flex items-center gap-1.5">
+                            <Pill className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>{t('Prescribed Medications:', 'परामर्शित दवाइयाँ:', 'பரிந்துரைக்கப்பட்ட மருந்துகள்:', 'సూచించిన మందులు:')}</span>
+                          </span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                            {meds.map((m: any, mIdx: number) => (
+                              <div key={mIdx} className="bg-white p-3 rounded-xl border border-blue-200 shadow-xs flex flex-col justify-between">
+                                <div>
+                                  <h5 className="font-black text-slate-900 text-xs">{m.name}</h5>
+                                  <div className="flex items-center gap-1 mt-1 flex-wrap">
+                                    {m.dosage && <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">{m.dosage}</span>}
+                                    {m.frequency && <span className="text-[10px] font-black text-blue-800 bg-blue-50 px-1.5 py-0.5 rounded">{m.frequency}</span>}
+                                    {m.duration && <span className="text-[10px] font-medium text-slate-500">{m.duration}</span>}
+                                  </div>
+                                </div>
+                                {m.instructions && (
+                                  <p className="text-[11px] text-slate-500 mt-1 italic">{m.instructions}</p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Doctor Notes & Advice */}
+                      {(cons.doctor_notes || cons.follow_up) && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                          {cons.follow_up && (
+                            <div className="bg-emerald-50/60 p-3 rounded-xl border border-emerald-200 text-xs">
+                              <span className="text-[10px] uppercase font-black text-emerald-800 block">{t('Follow-up Advice:', 'अनुवर्ती सलाह:', 'அறிவுரை:', 'సలహా:')}</span>
+                              <p className="font-bold text-emerald-950 mt-0.5">{cons.follow_up}</p>
+                            </div>
+                          )}
+                          {cons.doctor_notes && (
+                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
+                              <span className="text-[10px] uppercase font-black text-slate-500 block">{t('Doctor Notes:', 'डॉक्टर नोट्स:', 'மருத்துவர் குறிப்புகள்:', 'వైద్యుల నోట్స్:')}</span>
+                              <p className="font-medium text-slate-800 mt-0.5">{cons.doctor_notes}</p>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

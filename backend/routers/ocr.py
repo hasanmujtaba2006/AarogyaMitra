@@ -311,7 +311,10 @@ def save_ocr_text(payload: SaveTextRequest, db: Session = Depends(get_db)):
     """
     session = db.query(PatientSession).filter(PatientSession.id == payload.session_id).first()
     if not session:
-        raise HTTPException(status_code=404, detail="Active patient session not found")
+        session = PatientSession(id=payload.session_id, status="active")
+        db.add(session)
+        db.commit()
+        db.refresh(session)
 
     try:
         session.ocr_text = payload.text

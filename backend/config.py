@@ -8,7 +8,9 @@ class Settings(BaseSettings):
     # Database Configuration: Default to local SQLite fallback if DATABASE_URL is not set
     DATABASE_URL: str = "sqlite:///./aarogyamitra.db"
     
-    # AI APIs (Groq or OpenAI)
+    # AI APIs (Gemini, Groq, OpenAI)
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-3.5-flash"
     GROQ_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
     
@@ -44,7 +46,17 @@ class Settings(BaseSettings):
     FIREBASE_PROJECT_ID: str = ""
 
     class Config:
-        env_file = ".env"
+        env_file = (
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"),
+            os.path.join(os.getcwd(), ".env"),
+            ".env"
+        )
         extra = "ignore"
+
+from dotenv import load_dotenv
+# Explicitly load from backend directory
+_backend_env = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+if os.path.exists(_backend_env):
+    load_dotenv(_backend_env, override=True)
 
 settings = Settings()
