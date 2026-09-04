@@ -132,9 +132,7 @@ export default function MedicalRecordsView({
             <h2 className="text-lg sm:text-2xl font-black text-slate-900 truncate">
               {t('Electronic Medical Records (EMR)', 'इलेक्ट्रॉनिक मेडिकल रिकॉर्ड्स', 'மின்னணு மருத்துவப் பதிவுகள்', 'ఎలక్ట్రానిక్ మెడికల్ రికార్డులు')}
             </h2>
-            <p className="text-xs sm:text-sm font-medium text-slate-500 mt-0.5 truncate">
-              {t('Universal Health Records linked to ABHA ID', 'एबीएचए से जुड़े सार्वभौमिक स्वास्थ्य रिकॉर्ड', 'ABHA உடன் இணைக்கப்பட்ட மருத்துவப் பதிவுகள்', 'ABHA తో లింక్ చేయబడిన ఆరోగ్య రికార్డులు')}: <span className="font-mono font-bold text-slate-800">{patient.abha_number}</span>
-            </p>
+
           </div>
         </div>
 
