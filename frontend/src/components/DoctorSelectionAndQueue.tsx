@@ -15,7 +15,8 @@ import {
   AlertCircle,
   Volume2,
   Building2,
-  CreditCard
+  CreditCard,
+  Siren
 } from 'lucide-react'
 import { useLanguage } from '@/context/LanguageContext'
 import { StructuredClinicalData } from './StructuredClinicalSummaryCard'
@@ -37,6 +38,9 @@ export interface DoctorItem {
   matched_keywords?: string[];
   is_recommended: boolean;
   available_today?: boolean;
+  status?: string;
+  on_break?: boolean;
+  emergency_duty?: boolean;
 }
 
 export interface QueueState {
@@ -51,6 +55,8 @@ export interface QueueState {
   now_serving?: string;
   patients_ahead: number;
   estimated_wait_minutes: number;
+  auto_routed?: boolean;
+  reroute_message?: string;
 }
 
 interface DoctorSelectionAndQueueProps {
@@ -338,6 +344,25 @@ export default function DoctorSelectionAndQueue({
   const handleSelectAndQueue = async (doc: DoctorItem) => {
     setJoiningQueue(true)
     try {
+      // Get stored patient info as fallback
+      let pId: number | undefined = undefined
+      let pName: string | undefined = patientName
+      let pAbha: string | undefined = abhaId
+
+      if (typeof window !== 'undefined') {
+        try {
+          const stored = localStorage.getItem('aarogya_patient_info')
+          if (stored) {
+            const parsed = JSON.parse(stored)
+            if (parsed.id) pId = parsed.id
+            if (parsed.full_name && !pName) pName = parsed.full_name
+            if ((parsed.abha_address || parsed.abha_number) && !pAbha) {
+              pAbha = parsed.abha_address || parsed.abha_number
+            }
+          }
+        } catch (e) {}
+      }
+
       const res = await fetch('/api/chat/doctor/queue-patient', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -348,29 +373,35 @@ export default function DoctorSelectionAndQueue({
           doctor_specialty: doc.specialty,
           doctor_post: doc.post,
           doctor_room: doc.room_number,
-          doctor_fee: doc.fee
+          doctor_fee: doc.fee,
+          patient_id: pId,
+          patient_name: pName,
+          abha_id: pAbha
         })
       })
 
       if (res.ok) {
         const data = await res.json()
         const token = data.queue_token
+        const assignedDoc = data.doctor || doc
         setQueueState({
           is_queued: true,
           queue_token: token,
           queue_status: data.queue_status || 'waiting',
-          assigned_doctor_name: doc.name,
-          assigned_doctor_room: doc.room_number,
-          assigned_doctor_specialty: doc.specialty,
-          assigned_doctor_post: doc.post,
-          assigned_doctor_fee: doc.fee,
+          assigned_doctor_name: assignedDoc.name,
+          assigned_doctor_room: assignedDoc.room_number,
+          assigned_doctor_specialty: assignedDoc.specialty,
+          assigned_doctor_post: assignedDoc.post,
+          assigned_doctor_fee: assignedDoc.fee,
           now_serving: token,
           patients_ahead: doc.current_queue_count,
-          estimated_wait_minutes: Math.max(5, doc.current_queue_count * 7)
+          estimated_wait_minutes: Math.max(5, doc.current_queue_count * 7),
+          auto_routed: data.auto_routed,
+          reroute_message: data.reroute_message
         })
 
         // Auto-save clinical history & doctor assignment into patient's Medical Records
-        saveToMedicalRecord(doc, token)
+        saveToMedicalRecord(assignedDoc, token)
       }
     } catch (e) {
       console.error('Queue assignment failed:', e)
@@ -416,14 +447,29 @@ export default function DoctorSelectionAndQueue({
             </div>
           )}
 
+          {/* AUTO-ROUTED EMERGENCY DUTY BANNER */}
+          {queueState.auto_routed && (
+            <div className="p-4 bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 text-white rounded-2xl sm:rounded-3xl shadow-lg border-2 border-amber-300 flex items-center gap-3.5 animate-fadeIn">
+              <div className="p-2.5 bg-white/20 rounded-2xl shrink-0">
+                <Siren className="w-6 h-6 text-yellow-200 animate-pulse" />
+              </div>
+              <div>
+                <strong className="text-sm sm:text-base font-black block">Doctor on Emergency Duty — Auto-Routed to Backup Doctor</strong>
+                <p className="text-xs text-amber-100 mt-0.5 leading-relaxed">
+                  {queueState.reroute_message || 'The selected specialist is on urgent Emergency Duty. Your appointment has been seamlessly assigned to an available physician.'}
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* MAIN QUEUE TRACKER TICKET */}
           <div className="bg-white rounded-2xl sm:rounded-3xl border-2 sm:border-4 border-blue-900 shadow-xl overflow-hidden">
-            <div className="bg-gradient-to-r from-blue-950 via-blue-900 to-indigo-900 p-5 sm:p-7 text-white flex flex-col sm:flex-row justify-between items-center gap-4 text-center sm:text-left">
+            <div className="bg-gradient-to-r from-blue-950 via-blue-900 to-indigo-900 p-4 sm:p-7 text-white flex flex-col sm:flex-row justify-between items-center gap-3 sm:gap-4 text-center sm:text-left">
               <div>
-                <span className="bg-blue-800/80 text-blue-200 text-xs font-black uppercase tracking-wider px-3 py-1 rounded-full border border-blue-700">
+                <span className="bg-blue-800/80 text-blue-200 text-[10px] sm:text-xs font-black uppercase tracking-wider px-2.5 sm:px-3 py-1 rounded-full border border-blue-700">
                   {t('Live OPD Queue Tracker', 'लाइव ओपीडी कतार ट्रैकर', 'நேரலை OPD வரிசை', 'లైవ్ OPD క్యూ ట్రాకర్')}
                 </span>
-                <h3 className="text-xl sm:text-2xl font-black text-white mt-1">
+                <h3 className="text-lg sm:text-2xl font-black text-white mt-1 break-words">
                   {queueState.assigned_doctor_name}
                 </h3>
                 <p className="text-xs sm:text-sm text-blue-200 font-medium">
@@ -431,69 +477,69 @@ export default function DoctorSelectionAndQueue({
                 </p>
               </div>
 
-              <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/15">
-                <MapPin className="w-5 h-5 text-emerald-300" />
+              <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md px-3 sm:px-4 py-1.5 sm:py-2 rounded-2xl border border-white/15 shrink-0">
+                <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-300 shrink-0" />
                 <div className="text-left">
-                  <span className="text-[10px] text-blue-200 uppercase font-black block">{t('Consultation Room', 'कमरा संख्या', 'ஆலோசனை அறை', 'సంప్రదింపు గది')}</span>
-                  <span className="text-base sm:text-lg font-black text-white">Room {queueState.assigned_doctor_room}</span>
+                  <span className="text-[9px] sm:text-[10px] text-blue-200 uppercase font-black block">{t('Consultation Room', 'कमरा संख्या', 'ஆலோசனை அறை', 'సంప్రదింపు గది')}</span>
+                  <span className="text-sm sm:text-lg font-black text-white">Room {queueState.assigned_doctor_room}</span>
                 </div>
               </div>
             </div>
 
             {/* Token Highlight Area */}
-            <div className="p-6 sm:p-8 bg-slate-50 flex flex-col items-center justify-center space-y-5 text-center">
+            <div className="p-4 sm:p-8 bg-slate-50 flex flex-col items-center justify-center space-y-4 sm:space-y-5 text-center">
               <div>
                 <span className="text-xs uppercase font-extrabold text-slate-500 tracking-wider block">
                   {t('Your OPD Token Number', 'आपका ओपीडी टोकन नंबर', 'உங்கள் டோக்கன் எண்', 'మీ టోకెన్ సంఖ్య')}
                 </span>
-                <div className="mt-2 inline-flex items-center justify-center px-8 py-3 bg-gradient-to-r from-blue-900 to-indigo-900 text-white font-mono text-3xl sm:text-5xl font-black rounded-2xl shadow-xl tracking-wider border-2 border-blue-400">
+                <div className="mt-2 inline-flex items-center justify-center px-6 sm:px-8 py-2.5 sm:py-3 bg-gradient-to-r from-blue-900 to-indigo-900 text-white font-mono text-2xl xs:text-3xl sm:text-5xl font-black rounded-2xl shadow-xl tracking-wider border-2 border-blue-400 max-w-full truncate">
                   {queueState.queue_token}
                 </div>
               </div>
 
               {/* Status Meter Bar */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 w-full max-w-xl">
-                <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
-                  <span className="text-[11px] uppercase font-extrabold text-slate-400 block">{t('Now Serving', 'अभी सेवा में', 'தற்போதைய டோக்கன்', 'ప్రస్తుత టోకెన్')}</span>
-                  <span className="text-lg sm:text-xl font-black text-emerald-700 font-mono mt-0.5 block">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-4 w-full max-w-xl">
+                <div className="bg-white p-3 sm:p-3.5 rounded-xl border border-slate-200 shadow-xs">
+                  <span className="text-[10px] sm:text-[11px] uppercase font-extrabold text-slate-400 block">{t('Now Serving', 'अभी सेवा में', 'தற்போதைய டோக்கன்', 'ప్రస్తుత టోకెన్')}</span>
+                  <span className="text-base sm:text-xl font-black text-emerald-700 font-mono mt-0.5 block">
                     {queueState.now_serving || queueState.queue_token}
                   </span>
                 </div>
 
-                <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
-                  <span className="text-[11px] uppercase font-extrabold text-slate-400 block">{t('Patients Ahead', 'आपसे आगे मरीज', 'முன்னால் உள்ளவர்கள்', 'మీ ముందున్న రోగులు')}</span>
-                  <span className="text-lg sm:text-xl font-black text-blue-900 mt-0.5 block">
+                <div className="bg-white p-3 sm:p-3.5 rounded-xl border border-slate-200 shadow-xs">
+                  <span className="text-[10px] sm:text-[11px] uppercase font-extrabold text-slate-400 block">{t('Patients Ahead', 'आपसे आगे मरीज', 'முன்னால் உள்ளவர்கள்', 'మీ ముందున్న రోగులు')}</span>
+                  <span className="text-base sm:text-xl font-black text-blue-900 mt-0.5 block">
                     {queueState.patients_ahead} {t('Patients', 'मरीज', 'நபர்கள்', 'రోగులు')}
                   </span>
                 </div>
 
-                <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
-                  <span className="text-[11px] uppercase font-extrabold text-slate-400 block">{t('Estimated Wait', 'अनुमानित प्रतीक्षा', 'மதிப்பிடப்பட்ட நேரம்', 'అంచనా వేసిన సమయం')}</span>
-                  <span className="text-lg sm:text-xl font-black text-amber-700 mt-0.5 block">
+                <div className="bg-white p-3 sm:p-3.5 rounded-xl border border-slate-200 shadow-xs">
+                  <span className="text-[10px] sm:text-[11px] uppercase font-extrabold text-slate-400 block">{t('Estimated Wait', 'अनुमानित प्रतीक्षा', 'மதிப்பிடப்பட்ட நேரம்', 'అంచనా వేసిన సమయం')}</span>
+                  <span className="text-base sm:text-xl font-black text-amber-700 mt-0.5 block">
                     ~{queueState.estimated_wait_minutes} {t('Mins', 'मिनट', 'நிமிடம்', 'నిమి')}
                   </span>
                 </div>
               </div>
 
               {/* Live Polling Indicator */}
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-                <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping" />
+              <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 text-center px-2">
+                <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping shrink-0" />
                 <span>{t('Live Queue Status Active • Auto-refreshing every 3s', 'लाइव कतार स्थिति सक्रिय • हर 3 सेकंड में स्वतः अपडेट', 'நேரலை கண்காணிப்பு • 3 வினாடிகளில் புதுப்பிக்கப்படுகிறது', 'లైవ్ క్యూ యాక్టివ్ • ప్రతి 3 సెకన్లకు రిఫ్రెష్')}</span>
               </div>
 
               {/* Action Buttons */}
-              <div className="flex flex-wrap gap-3 justify-center pt-2">
+              <div className="flex flex-col sm:flex-row gap-2.5 sm:gap-3 w-full sm:w-auto justify-center pt-2">
                 <button
                   onClick={onViewMedicalRecords}
-                  className="h-12 sm:h-14 px-6 bg-blue-900 hover:bg-blue-950 text-white font-black text-sm sm:text-base rounded-xl sm:rounded-2xl shadow-md flex items-center gap-2 transition-all"
+                  className="w-full sm:w-auto h-12 sm:h-14 px-5 sm:px-6 bg-blue-900 hover:bg-blue-950 text-white font-black text-xs sm:text-base rounded-xl sm:rounded-2xl shadow-md flex items-center justify-center gap-2 transition-all active:scale-95"
                 >
-                  <FolderHeart className="w-5 h-5" />
+                  <FolderHeart className="w-4 h-4 sm:w-5 sm:h-5" />
                   <span>{t('View in Medical Records', 'मेडिकल रिकॉर्ड में देखें', 'மருத்துவப் பதிவுகள்', 'మెడికల్ రికార్డులు')}</span>
                 </button>
 
                 <button
                   onClick={() => window.print()}
-                  className="h-12 sm:h-14 px-5 bg-white hover:bg-slate-100 text-slate-800 font-extrabold text-sm sm:text-base rounded-xl sm:rounded-2xl border border-slate-300 shadow-xs flex items-center gap-2"
+                  className="w-full sm:w-auto h-12 sm:h-14 px-4 sm:px-5 bg-white hover:bg-slate-100 text-slate-800 font-extrabold text-xs sm:text-base rounded-xl sm:rounded-2xl border border-slate-300 shadow-xs flex items-center justify-center gap-2 active:scale-95"
                 >
                   <span>{t('Print Token Slip', 'टोकन पर्ची प्रिंट करें', 'டோக்கன் அச்சிடுக', 'టోకెన్ ప్రింట్ చేయండి')}</span>
                 </button>
@@ -587,40 +633,40 @@ export default function DoctorSelectionAndQueue({
 
                       {/* Doctor Details Grid */}
                       <div className="mt-3.5 grid grid-cols-2 gap-2 text-xs">
-                        <div className="bg-white/80 p-2.5 rounded-xl border border-slate-200/80">
+                        <div className="bg-white/80 p-2 sm:p-2.5 rounded-xl border border-slate-200/80">
                           <span className="text-[10px] uppercase font-bold text-slate-400 block">{t('Specialisation', 'विशेषज्ञता', 'சிறப்பு', 'ప్రత్యేకత')}</span>
                           <span className="font-extrabold text-slate-800 truncate block mt-0.5">{doc.specialty}</span>
                         </div>
 
-                        <div className="bg-white/80 p-2.5 rounded-xl border border-slate-200/80">
+                        <div className="bg-white/80 p-2 sm:p-2.5 rounded-xl border border-slate-200/80">
                           <span className="text-[10px] uppercase font-bold text-slate-400 block">{t('Consulting Fee', 'परामर्श शुल्क', 'கட்டணம்', 'ఫీజు')}</span>
-                          <span className="font-black text-emerald-700 flex items-center gap-1 mt-0.5">
-                            <CreditCard className="w-3 h-3" />
-                            {doc.fee}
+                          <span className="font-black text-emerald-700 flex items-center gap-1 mt-0.5 truncate">
+                            <CreditCard className="w-3 h-3 shrink-0" />
+                            <span className="truncate">{doc.fee}</span>
                           </span>
                         </div>
 
-                        <div className="bg-white/80 p-2.5 rounded-xl border border-slate-200/80">
+                        <div className="bg-white/80 p-2 sm:p-2.5 rounded-xl border border-slate-200/80">
                           <span className="text-[10px] uppercase font-bold text-slate-400 block">{t('Room Location', 'कमरा नंबर', 'அறை', 'గది సంఖ్య')}</span>
-                          <span className="font-black text-blue-950 flex items-center gap-1 mt-0.5">
-                            <Building2 className="w-3 h-3 text-blue-700" />
-                            Room {doc.room_number}
+                          <span className="font-black text-blue-950 flex items-center gap-1 mt-0.5 truncate">
+                            <Building2 className="w-3 h-3 text-blue-700 shrink-0" />
+                            <span>Room {doc.room_number}</span>
                           </span>
                         </div>
 
-                        <div className="bg-white/80 p-2.5 rounded-xl border border-slate-200/80">
-                          <span className="text-[10px] uppercase font-bold text-slate-400 block">{t('Current Queue', 'वर्तमान कतार', 'தற்போதைய வரிசை', 'ప్రస్తుత క్యూ')}</span>
-                          <span className="font-black text-amber-800 flex items-center gap-1 mt-0.5">
-                            <Clock className="w-3 h-3 text-amber-600" />
-                            {doc.current_queue_count} {t('waiting', 'प्रतीक्षारत', 'காத்திருப்பு', 'వేచి ఉన్నారు')}
+                        <div className="bg-white/80 p-2 sm:p-2.5 rounded-xl border border-slate-200/80">
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block">{t('Current Queue', 'वर्तमान कतार', 'தற்போதைய வரிசை', 'ప్రస్తుత क్యూ')}</span>
+                          <span className="font-black text-amber-800 flex items-center gap-1 mt-0.5 truncate">
+                            <Clock className="w-3 h-3 text-amber-600 shrink-0" />
+                            <span>{doc.current_queue_count} {t('waiting', 'प्रतीक्षारत', 'காத்திருப்பு', 'వేచి ఉన్నారు')}</span>
                           </span>
                         </div>
                       </div>
                     </div>
 
                     {/* Choose Doctor CTA */}
-                    <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                      <span className="text-xs font-semibold text-slate-500">
+                    <div className="mt-4 pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+                      <span className="text-xs font-semibold text-slate-500 text-center sm:text-left">
                         {doc.experience} {t('Experience', 'अनुभव', 'அனுபவம்', 'అనుభవం')}
                       </span>
 
@@ -630,7 +676,7 @@ export default function DoctorSelectionAndQueue({
                           handleSelectAndQueue(doc)
                         }}
                         disabled={joiningQueue}
-                        className={`h-10 sm:h-11 px-4 sm:px-5 font-black text-xs sm:text-sm rounded-xl flex items-center gap-1.5 shadow-md transition-all ${
+                        className={`w-full sm:w-auto h-10 sm:h-11 px-4 sm:px-5 font-black text-xs sm:text-sm rounded-xl flex items-center justify-center gap-1.5 shadow-md transition-all active:scale-95 ${
                           isRec
                             ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
                             : 'bg-blue-900 hover:bg-blue-950 text-white'

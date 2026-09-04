@@ -9,18 +9,18 @@ export default function Footer() {
         <div className="h-full flex-1 bg-white border-y border-slate-100"></div>
         <div className="h-full flex-1 bg-[#16A34A]"></div>
       </div>
-      <div className="max-w-7xl mx-auto w-full py-3 px-4 sm:px-6 flex flex-col sm:flex-row justify-between items-center gap-2.5 sm:gap-4">
+      <div className="max-w-7xl mx-auto w-full py-2.5 sm:py-3 px-3 sm:px-6 flex flex-col sm:flex-row justify-between items-center gap-2 sm:gap-4">
         {/* Left/Center: Digital India Logo */}
         <div className="flex items-center shrink-0">
           <img
             src="/logos/digital-india-logo.jpg"
             alt="Digital India"
-            className="h-7 sm:h-9 w-auto object-contain"
+            className="h-6 xs:h-7 sm:h-9 w-auto object-contain"
           />
         </div>
         {/* Center/Right: Mockup Disclaimer */}
         <div className="text-center sm:text-right">
-          <p className="text-[11px] sm:text-xs text-gray-400 font-medium leading-normal">
+          <p className="text-[10px] xs:text-[11px] sm:text-xs text-gray-400 font-medium leading-relaxed">
             Mockup for Smart India Hackathon Prototype Only. Not an official government application.
           </p>
         </div>

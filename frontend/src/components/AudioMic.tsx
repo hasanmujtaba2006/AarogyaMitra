@@ -364,12 +364,12 @@ export default function AudioMic({ language, messages, onSendMessage, isProcessi
           <Globe className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
           <span>{t('Speaking / Consultation Language:', 'बातचीत की भाषा:', 'பேசும் மொழி:', 'మాట్లాడే భాష:')}</span>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
           {[
-            { code: 'hi', label: 'हिन्दी (Hindi)' },
+            { code: 'hi', label: 'हिन्दी' },
             { code: 'en', label: 'English' },
-            { code: 'ta', label: 'தமிழ் (Tamil)' },
-            { code: 'te', label: 'తెలుగు (Telugu)' }
+            { code: 'ta', label: 'தமிழ்' },
+            { code: 'te', label: 'తెలుగు' }
           ].map((l) => {
             const isSelected = language === l.code
             return (
@@ -380,7 +380,7 @@ export default function AudioMic({ language, messages, onSendMessage, isProcessi
                   stopSpeaking()
                   if (onLanguageChange) onLanguageChange(l.code as LanguageCode)
                 }}
-                className={`px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                className={`px-2 sm:px-3 py-1 rounded-lg text-xs font-bold transition-all ${
                   isSelected
                     ? 'bg-emerald-500 text-slate-950 shadow-md font-extrabold scale-105 ring-2 ring-emerald-300'
                     : 'bg-blue-900/70 text-slate-200 hover:bg-blue-800 hover:text-white'

@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from config import settings
 from database import get_db
-from models import PatientSession, InterviewHistory
+from models import PatientSession, InterviewHistory, Doctor
 from utils.bhashini_mock import translate_text
 from utils.fhir_gen import generate_fhir_bundle
 from typing import Optional, List, Dict, Any
@@ -811,7 +811,7 @@ def get_available_doctors(
     chief_complaint: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    """Returns directory of OPD specialist doctors with disease/symptom matching and live queue counts."""
+    """Returns directory of OPD specialist doctors with disease/symptom matching, live queue counts, and availability status."""
     parts = []
     if chief_complaint:
         parts.append(chief_complaint)
@@ -833,11 +833,47 @@ def get_available_doctors(
 
     search_context = " ".join(parts).lower()
 
+    # Query doctors from database
+    db_doctors = db.query(Doctor).filter(Doctor.is_active == 1).all()
+    
+    doctor_list = []
+    if db_doctors:
+        for d in db_doctors:
+            keywords = d.matching_keywords if isinstance(d.matching_keywords, list) else []
+            if not keywords:
+                keywords = [d.specialization.lower(), d.department.lower()]
+            doctor_list.append({
+                "id": d.id,
+                "name": d.full_name,
+                "qualification": d.qualifications,
+                "specialty": d.specialization,
+                "post": d.post or "Consultant Specialist",
+                "room_number": d.room_number,
+                "fee": d.fee or "₹0 (Free Govt Kiosk Service)",
+                "department": d.department,
+                "experience": d.experience or "10 Years",
+                "available_today": d.status != "Emergency Duty",
+                "status": d.status,
+                "on_break": d.status == "On Break",
+                "emergency_duty": d.status == "Emergency Duty",
+                "avatar": d.profile_photo or "👨‍⚕️",
+                "matching_keywords": keywords
+            })
+    else:
+        # Fallback to in-memory defaults
+        for doc in AVAILABLE_DOCTORS:
+            doctor_list.append({
+                **doc,
+                "status": "Consulting",
+                "on_break": False,
+                "emergency_duty": False
+            })
+
     results = []
     best_doc_id = None
     max_score = -1
 
-    for doc in AVAILABLE_DOCTORS:
+    for doc in doctor_list:
         # Count live waiting queue for this doctor
         waiting_count = db.query(PatientSession).filter(
             PatientSession.assigned_doctor_id == doc["id"],
@@ -852,6 +888,10 @@ def get_available_doctors(
                 score += 1
                 matched_tags.append(kw)
         
+        # Don't recommend doctor if on Emergency Duty
+        if doc.get("emergency_duty"):
+            score = -10
+
         if score > max_score and score > 0:
             max_score = score
             best_doc_id = doc["id"]
@@ -865,31 +905,106 @@ def get_available_doctors(
             "is_recommended": False
         })
 
-    # If no specific match was found, default recommendation to General Medicine (doc-102)
+    # If no specific match or best doctor is on Emergency Duty, find first available Consulting doctor
     if not best_doc_id:
-        best_doc_id = "doc-102"
+        for r in results:
+            if not r.get("emergency_duty") and not r.get("on_break"):
+                best_doc_id = r["id"]
+                break
+        if not best_doc_id and results:
+            best_doc_id = results[0]["id"]
 
     for r in results:
         if r["id"] == best_doc_id:
             r["is_recommended"] = True
 
-    # Sort so recommended doctor is at the top, then by queue count
-    results.sort(key=lambda x: (not x["is_recommended"], -x["match_score"], x["current_queue_count"]))
+    # Sort so recommended doctor is at top, emergency duty at bottom, then by queue count
+    results.sort(key=lambda x: (
+        not x["is_recommended"],
+        x.get("emergency_duty", False),
+        -x["match_score"],
+        x["current_queue_count"]
+    ))
 
     return {"doctors": results, "recommended_doctor_id": best_doc_id}
 
 
 @router.post("/doctor/queue-patient")
 def queue_patient_to_doctor(payload: DoctorQueueRequest, db: Session = Depends(get_db)):
-    """Assigns patient to a chosen doctor, assigns queue token, and sets queue status."""
+    """
+    Assigns patient to a chosen doctor, assigns queue token, and sets queue status.
+    If chosen doctor is on Emergency Duty, automatically routes patient to an available doctor.
+    """
     session = db.query(PatientSession).filter(PatientSession.id == payload.session_id).first()
     if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+        session = PatientSession(id=payload.session_id, status="active")
+        db.add(session)
+        db.commit()
+        db.refresh(session)
+
+    # Automatically resolve & link ABHA patient if not linked
+    if session.abha_id is None:
+        if payload.patient_id:
+            session.abha_id = payload.patient_id
+        elif payload.abha_id:
+            user = db.query(AbhaUser).filter(
+                (AbhaUser.abha_address == payload.abha_id) | 
+                (AbhaUser.abha_number == payload.abha_id)
+            ).first()
+            if user:
+                session.abha_id = user.id
+        elif payload.patient_name:
+            user = db.query(AbhaUser).filter(AbhaUser.full_name.ilike(f"%{payload.patient_name}%")).first()
+            if user:
+                session.abha_id = user.id
+        
+        if session.abha_id is None:
+            latest_user = db.query(AbhaUser).order_by(AbhaUser.id.desc()).first()
+            if latest_user:
+                session.abha_id = latest_user.id
+
+    target_doctor_id = payload.doctor_id
+    target_doctor_name = payload.doctor_name
+    target_doctor_specialty = payload.doctor_specialty
+    target_doctor_post = payload.doctor_post
+    target_doctor_room = payload.doctor_room
+    target_doctor_fee = payload.doctor_fee or "₹0 (Free Govt Kiosk)"
+
+    auto_routed = False
+    reroute_message = ""
+    original_doctor_name = target_doctor_name
+
+    # Check if chosen doctor is on Emergency Duty
+    doc_in_db = db.query(Doctor).filter(Doctor.id == target_doctor_id, Doctor.is_active == 1).first()
+    if doc_in_db and doc_in_db.status == "Emergency Duty":
+        auto_routed = True
+        # Find another active doctor with status Consulting (prefer same department or General Medicine)
+        fallback_doc = db.query(Doctor).filter(
+            Doctor.id != target_doctor_id,
+            Doctor.is_active == 1,
+            Doctor.status == "Consulting"
+        ).order_by(
+            Doctor.department == doc_in_db.department, # exact dept match first
+            Doctor.id == "doc-102"
+        ).first()
+
+        if fallback_doc:
+            target_doctor_id = fallback_doc.id
+            target_doctor_name = fallback_doc.full_name
+            target_doctor_specialty = fallback_doc.specialization
+            target_doctor_post = fallback_doc.post
+            target_doctor_room = fallback_doc.room_number
+            target_doctor_fee = fallback_doc.fee
+            reroute_message = f"Notice: Dr. {doc_in_db.full_name} is on Emergency Duty. You have been auto-routed to Dr. {fallback_doc.full_name} in Cabin {fallback_doc.room_number}."
+        else:
+            reroute_message = f"Notice: Dr. {doc_in_db.full_name} is on Emergency Duty. Consultation will be handled on urgent clinical priority."
 
     # If already queued for this doctor, return existing token
-    if session.assigned_doctor_id == payload.doctor_id and session.queue_token:
+    if session.assigned_doctor_id == target_doctor_id and session.queue_token:
         return {
             "status": "already_queued",
+            "auto_routed": auto_routed,
+            "reroute_message": reroute_message,
             "queue_token": session.queue_token,
             "queue_status": session.queue_status,
             "doctor": {
@@ -905,19 +1020,19 @@ def queue_patient_to_doctor(payload: DoctorQueueRequest, db: Session = Depends(g
     # Generate sequential token for this room today
     today_start = datetime.datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     existing_for_room = db.query(PatientSession).filter(
-        PatientSession.assigned_doctor_room == payload.doctor_room,
+        PatientSession.assigned_doctor_room == target_doctor_room,
         PatientSession.queue_assigned_at >= today_start
     ).count()
 
     token_number = existing_for_room + 1
-    queue_token = f"OPD-{payload.doctor_room}-{token_number:02d}"
+    queue_token = f"OPD-{target_doctor_room}-{token_number:02d}"
 
-    session.assigned_doctor_id = payload.doctor_id
-    session.assigned_doctor_name = payload.doctor_name
-    session.assigned_doctor_specialty = payload.doctor_specialty
-    session.assigned_doctor_post = payload.doctor_post
-    session.assigned_doctor_room = payload.doctor_room
-    session.assigned_doctor_fee = payload.doctor_fee or "₹0 (Free Govt Kiosk)"
+    session.assigned_doctor_id = target_doctor_id
+    session.assigned_doctor_name = target_doctor_name
+    session.assigned_doctor_specialty = target_doctor_specialty
+    session.assigned_doctor_post = target_doctor_post
+    session.assigned_doctor_room = target_doctor_room
+    session.assigned_doctor_fee = target_doctor_fee
     session.queue_token = queue_token
     session.queue_status = "waiting"
     session.queue_assigned_at = datetime.datetime.utcnow()
@@ -927,6 +1042,9 @@ def queue_patient_to_doctor(payload: DoctorQueueRequest, db: Session = Depends(g
 
     return {
         "status": "queued",
+        "auto_routed": auto_routed,
+        "reroute_message": reroute_message,
+        "original_doctor_name": original_doctor_name if auto_routed else None,
         "queue_token": queue_token,
         "queue_status": session.queue_status,
         "doctor": {

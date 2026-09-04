@@ -69,7 +69,8 @@ export default function KioskPage() {
 
   useEffect(() => {
     // Generate unique session ID on page load
-    setSessionId('session_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now())
+    const newSessionId = 'session_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now()
+    setSessionId(newSessionId)
 
     // Once a user logs in using their preferred app language, don't ask repeatedly
     if (typeof window !== 'undefined') {
@@ -97,8 +98,21 @@ export default function KioskPage() {
       if (hasAlreadyLoggedIn && savedLang) {
         if (savedPatient) {
           try {
-            setPatient(JSON.parse(savedPatient))
+            const parsed = JSON.parse(savedPatient)
+            setPatient(parsed)
             setActiveTab('profile')
+
+            // Ensure active session is registered and linked to this patient in backend
+            fetch('/api/abdm/create-session', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                id: newSessionId,
+                abha_id: parsed.id,
+                language: savedLang
+              })
+            }).catch(err => console.error("Session auto-sync error:", err))
+
             return
           } catch (e) {
             // fallback to login
@@ -372,18 +386,18 @@ export default function KioskPage() {
   return (
     <div className="min-h-screen flex flex-col justify-between bg-slate-50/60 print:bg-white">
       <Header />
-      <main className="flex-1 flex flex-col justify-start py-4 sm:py-6 px-2.5 sm:px-6 print:p-0 print:m-0 print:block">
+      <main className="flex-1 flex flex-col justify-start py-3 sm:py-6 px-2 xs:px-3 sm:px-6 print:p-0 print:m-0 print:block">
         {patient ? (
           /* =========================================================================
              LOGGED-IN PATIENT PORTAL
              ========================================================================= */
-          <div className="max-w-6xl mx-auto w-full flex flex-col gap-4 sm:gap-6 print:gap-0 print:max-w-full">
+          <div className="max-w-6xl mx-auto w-full flex flex-col gap-3.5 sm:gap-6 print:gap-0 print:max-w-full">
             
             {/* UNIFIED PATIENT PORTAL HEADER CARD (Welcome, Language, Navigation Tabs & Logout) */}
-            <div className="w-full bg-slate-900 text-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xl sm:shadow-2xl border sm:border-2 border-slate-800 flex flex-col gap-4 sm:gap-5 print:hidden">
+            <div className="w-full bg-slate-900 text-white rounded-2xl sm:rounded-3xl p-3.5 sm:p-6 shadow-xl sm:shadow-2xl border sm:border-2 border-slate-800 flex flex-col gap-3.5 sm:gap-5 print:hidden">
               {/* TOP ROW: Welcome Message (Left) & Language Dropdown (Right) */}
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
-                <div className="flex-1">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2.5 sm:gap-4">
+                <div className="flex-1 min-w-0">
                   {(() => {
                     const rawName = patient?.full_name?.trim() || ''
                     const nameEn = rawName
@@ -392,7 +406,7 @@ export default function KioskPage() {
                     const nameTe = transliterateName(rawName, 'te')
 
                     return (
-                      <h1 className="text-lg sm:text-2xl md:text-3xl font-black tracking-tight text-white leading-snug">
+                      <h1 className="text-base xs:text-lg sm:text-2xl md:text-3xl font-black tracking-tight text-white leading-snug break-words">
                         {t(
                           nameEn
                             ? `Welcome ${nameEn}, Your Health Matters. We’re Here to Help.`
@@ -422,9 +436,9 @@ export default function KioskPage() {
               </div>
 
               {/* BOTTOM ROW: 5 Pages Switching List (Left) & Logout Button (Right) */}
-              <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-2.5 sm:gap-3 pt-3 border-t border-slate-800/80">
+              <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-2.5 sm:gap-3 pt-2.5 sm:pt-3 border-t border-slate-800/80">
                 {/* 5 Pages Switching Tabs - Horizontally scrollable without break on mobile */}
-                <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none flex-nowrap sm:flex-wrap -mx-1 px-1">
+                <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none flex-nowrap -mx-1 px-1">
                   {navigationTabs.map((tab) => {
                     const isActive = activeTab === tab.id
                     const Icon = tab.icon
@@ -433,7 +447,7 @@ export default function KioskPage() {
                         key={tab.id}
                         type="button"
                         onClick={() => setActiveTab(tab.id)}
-                        className={`px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all active:scale-95 flex items-center gap-1.5 sm:gap-2 shrink-0 ${
+                        className={`px-2.5 xs:px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all active:scale-95 flex items-center gap-1.5 sm:gap-2 shrink-0 ${
                           isActive
                             ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30 border border-blue-400'
                             : 'text-slate-300 hover:text-white hover:bg-slate-800/80 border border-slate-700/60'
@@ -451,7 +465,7 @@ export default function KioskPage() {
                   <button
                     type="button"
                     onClick={handleRestart}
-                    className="w-full sm:w-auto px-3.5 sm:px-4 py-1.5 sm:py-2 bg-red-600/90 hover:bg-red-600 active:scale-95 text-white text-xs sm:text-sm font-black rounded-xl transition-all shadow-md shadow-red-900/30 flex items-center justify-center gap-1.5 sm:gap-2 border border-red-500/50"
+                    className="w-full sm:w-auto px-3 xs:px-3.5 sm:px-4 py-1.5 sm:py-2 bg-red-600/90 hover:bg-red-600 active:scale-95 text-white text-xs sm:text-sm font-black rounded-xl transition-all shadow-md shadow-red-900/30 flex items-center justify-center gap-1.5 sm:gap-2 border border-red-500/50"
                   >
                     <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                     <span>{t('Logout Button', 'लॉग आउट', 'வெளியேறு', 'లాగౌట్')}</span>
@@ -462,13 +476,13 @@ export default function KioskPage() {
 
             {/* Emergency Triage Indicator Banner */}
             {triageAlerted && (
-              <div className="w-full bg-red-50 border-4 border-red-600 rounded-3xl p-6 flex items-start gap-4 shadow-xl animate-bounce-short">
-                <ShieldAlert className="w-12 h-12 text-red-600 shrink-0" />
-                <div>
-                  <h4 className="text-2xl font-black text-red-800">
+              <div className="w-full bg-red-50 border-2 sm:border-4 border-red-600 rounded-2xl sm:rounded-3xl p-4 sm:p-6 flex items-start gap-3 sm:gap-4 shadow-xl animate-bounce-short">
+                <ShieldAlert className="w-8 h-8 sm:w-12 sm:h-12 text-red-600 shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <h4 className="text-base sm:text-2xl font-black text-red-800 break-words">
                     {t('EMERGENCY TRIAGE ALERT TRIGGERED', 'आपातकालीन ट्राइएज चेतावनी जारी', 'அவசர சிகிச்சை எச்சரிக்கை தூண்டப்பட்டது', 'అత్యవసర ట్రయాజ్ అలర్ట్ యాక్టివేట్ చేయబడింది')}
                   </h4>
-                  <p className="text-base sm:text-lg font-bold text-red-700 mt-1">
+                  <p className="text-xs sm:text-base md:text-lg font-bold text-red-700 mt-1">
                     {t('Symptoms indicate a high-priority emergency. Kiosk is alerting OPD nurses immediately.', 'लक्षण गंभीर हैं। नर्स को सूचित किया जा रहा है।', 'அறிகுறிகள் அவசரநிலையைக் குறிக்கின்றன. மருத்துவமனைக்குத் தகவல் அனுப்பப்படுகிறது.', 'లక్షణాలు అత్యవసర పరిస్థితిని సూచిస్తున్నాయి. నర్సులకు సమాచారం అందుతోంది.')}
                   </p>
                 </div>
@@ -694,16 +708,16 @@ export default function KioskPage() {
                   {isConsultationFinished ? (
                     <div className="w-full max-w-4xl space-y-6">
                       {/* Top success announcement banner */}
-                      <div className="bg-gradient-to-r from-emerald-600 via-teal-700 to-blue-900 text-white p-5 sm:p-7 rounded-2xl sm:rounded-3xl shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
-                        <div className="flex items-center gap-3 sm:gap-4">
-                          <div className="p-3 bg-white/20 backdrop-blur-md rounded-2xl shrink-0">
-                            <CheckCircle2 className="w-8 h-8 sm:w-10 sm:h-10 text-emerald-200" />
+                      <div className="bg-gradient-to-r from-emerald-600 via-teal-700 to-blue-900 text-white p-4 sm:p-7 rounded-2xl sm:rounded-3xl shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
+                        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-3 sm:gap-4">
+                          <div className="p-2.5 sm:p-3 bg-white/20 backdrop-blur-md rounded-2xl shrink-0">
+                            <CheckCircle2 className="w-7 h-7 sm:w-10 sm:h-10 text-emerald-200" />
                           </div>
-                          <div>
-                            <span className="bg-emerald-500/40 text-emerald-100 text-[10px] sm:text-xs font-black uppercase px-2.5 py-0.5 rounded-full border border-emerald-300/30 tracking-wider">
+                          <div className="min-w-0">
+                            <span className="bg-emerald-500/40 text-emerald-100 text-[10px] sm:text-xs font-black uppercase px-2.5 py-0.5 rounded-full border border-emerald-300/30 tracking-wider inline-block">
                               {t('Consultation Intake Completed', 'क्लिनिकल परामर्श संपन्न', 'ஆலோசனை முடிந்தது', 'క్లినికల్ సంప్రదింపు పూర్తయింది')}
                             </span>
-                            <h2 className="text-xl sm:text-2xl font-black text-white mt-1">
+                            <h2 className="text-lg sm:text-2xl font-black text-white mt-1 break-words">
                               {t('Symptoms Structured into Clinical History', 'लक्षणों का क्लिनिकल सारांश तैयार है', 'மருத்துவ வரலாறு தயாராக உள்ளது', 'క్లినికల్ చరిత్ర సిద్ధంగా ఉంది')}
                             </h2>
                             <p className="text-xs sm:text-sm text-emerald-100 mt-0.5">
@@ -714,7 +728,7 @@ export default function KioskPage() {
 
                         <button
                           onClick={() => setActiveTab('medical_record')}
-                          className="h-11 sm:h-12 px-5 bg-white hover:bg-slate-100 text-slate-900 font-extrabold text-xs sm:text-sm rounded-xl sm:rounded-2xl shadow-md flex items-center gap-2 shrink-0 transition-all"
+                          className="w-full sm:w-auto h-11 sm:h-12 px-5 bg-white hover:bg-slate-100 text-slate-900 font-extrabold text-xs sm:text-sm rounded-xl sm:rounded-2xl shadow-md flex items-center justify-center gap-2 shrink-0 transition-all active:scale-95"
                         >
                           <FolderHeart className="w-4 h-4 text-blue-900" />
                           <span>{t('View in Medical Records', 'मेडिकल रिकॉर्ड में देखें', 'மருத்துவப் பதிவுகள்', 'మెడికల్ రికార్డులు')}</span>

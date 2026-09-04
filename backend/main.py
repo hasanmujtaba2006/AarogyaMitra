@@ -14,8 +14,10 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from database import engine, Base, get_db
+import models
 from schemas import HealthResponse
-from routers import abdm, chat, ocr, triage, custom_auth, auth_firebase
+from routers import abdm, chat, ocr, triage, custom_auth, auth_firebase, opd
+from routers.opd import seed_doctors_if_needed
 
 # Create database tables at startup and migrate if needed
 def migrate_database():
@@ -30,6 +32,26 @@ def migrate_database():
             if "doctor_prescription" not in columns:
                 conn.execute(text("ALTER TABLE patient_sessions ADD COLUMN doctor_prescription TEXT"))
                 print("Migration: Added column doctor_prescription to patient_sessions")
+            if "structured_summary" not in columns:
+                conn.execute(text("ALTER TABLE patient_sessions ADD COLUMN structured_summary JSON"))
+            if "assigned_doctor_id" not in columns:
+                conn.execute(text("ALTER TABLE patient_sessions ADD COLUMN assigned_doctor_id VARCHAR(50)"))
+            if "assigned_doctor_name" not in columns:
+                conn.execute(text("ALTER TABLE patient_sessions ADD COLUMN assigned_doctor_name VARCHAR(100)"))
+            if "assigned_doctor_specialty" not in columns:
+                conn.execute(text("ALTER TABLE patient_sessions ADD COLUMN assigned_doctor_specialty VARCHAR(100)"))
+            if "assigned_doctor_post" not in columns:
+                conn.execute(text("ALTER TABLE patient_sessions ADD COLUMN assigned_doctor_post VARCHAR(100)"))
+            if "assigned_doctor_room" not in columns:
+                conn.execute(text("ALTER TABLE patient_sessions ADD COLUMN assigned_doctor_room VARCHAR(50)"))
+            if "assigned_doctor_fee" not in columns:
+                conn.execute(text("ALTER TABLE patient_sessions ADD COLUMN assigned_doctor_fee VARCHAR(50)"))
+            if "queue_token" not in columns:
+                conn.execute(text("ALTER TABLE patient_sessions ADD COLUMN queue_token VARCHAR(50)"))
+            if "queue_status" not in columns:
+                conn.execute(text("ALTER TABLE patient_sessions ADD COLUMN queue_status VARCHAR(50) DEFAULT 'none'"))
+            if "queue_assigned_at" not in columns:
+                conn.execute(text("ALTER TABLE patient_sessions ADD COLUMN queue_assigned_at TIMESTAMP"))
             conn.commit()
 
     if "abha_users" in inspector.get_table_names():
@@ -57,6 +79,17 @@ except Exception as e:
     print(f"Migration warning: {e}")
 
 Base.metadata.create_all(bind=engine)
+
+# Seed initial doctors
+try:
+    with engine.connect() as conn:
+        pass
+    from database import SessionLocal
+    _init_db = SessionLocal()
+    seed_doctors_if_needed(_init_db)
+    _init_db.close()
+except Exception as e:
+    print(f"Doctor seed warning: {e}")
 
 import asyncio
 import logging
@@ -116,6 +149,7 @@ app.include_router(abdm.router)
 app.include_router(chat.router)
 app.include_router(ocr.router)
 app.include_router(triage.router)
+app.include_router(opd.router)
 
 @app.get("/")
 def read_root():

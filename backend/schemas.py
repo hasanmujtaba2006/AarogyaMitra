@@ -127,7 +127,51 @@ class DoctorQueueRequest(BaseModel):
     doctor_post: str
     doctor_room: str
     doctor_fee: Optional[str] = "₹0 (Free Govt Kiosk)"
+    patient_id: Optional[int] = None
+    patient_name: Optional[str] = None
+    abha_id: Optional[str] = None
 
 class CallPatientRequest(BaseModel):
     session_id: str
+
+# --- Admin & Doctor OPD Schemas ---
+class AdminLoginRequest(BaseModel):
+    username: str
+    password: str
+
+class DoctorLoginRequest(BaseModel):
+    username: str
+    password: str
+
+class DoctorCreateRequest(BaseModel):
+    full_name: str
+    qualifications: str
+    specialization: str
+    department: str
+    room_number: str
+    fee: Optional[str] = "₹0 (Free Govt Kiosk Service)"
+    consultation_time: Optional[str] = "09:00 AM - 02:00 PM"
+    profile_photo: Optional[str] = None
+    experience: Optional[str] = "10 Years"
+    post: Optional[str] = "Consultant Specialist"
+    username: str
+    password: str
+
+class DoctorUpdateRequest(BaseModel):
+    full_name: Optional[str] = None
+    qualifications: Optional[str] = None
+    specialization: Optional[str] = None
+    department: Optional[str] = None
+    room_number: Optional[str] = None
+    fee: Optional[str] = None
+    consultation_time: Optional[str] = None
+    profile_photo: Optional[str] = None
+    experience: Optional[str] = None
+    post: Optional[str] = None
+    status: Optional[str] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
+
+class DoctorStatusUpdateRequest(BaseModel):
+    status: str # Consulting, On Break, Emergency Duty
 

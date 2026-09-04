@@ -72,3 +72,25 @@ class InterviewHistory(Base):
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)
 
     session = relationship("PatientSession", back_populates="chat_history")
+
+
+class Doctor(Base):
+    __tablename__ = "doctors"
+
+    id = Column(String(50), primary_key=True, index=True) # e.g. "doc-104" or UUID
+    full_name = Column(String(100), nullable=False)
+    username = Column(String(100), unique=True, index=True, nullable=False)
+    password = Column(String(200), nullable=False)
+    profile_photo = Column(Text, nullable=True) # URL or base64 or avatar
+    qualifications = Column(String(200), nullable=False) # e.g. MBBS, MD, DM
+    specialization = Column(String(150), nullable=False) # e.g. Gastroenterology & Digestive Care
+    department = Column(String(100), nullable=False) # e.g. Gastroenterology
+    room_number = Column(String(50), nullable=False) # e.g. "104"
+    fee = Column(String(50), default="₹0 (Free Govt Kiosk Service)", nullable=True)
+    consultation_time = Column(String(100), default="09:00 AM - 02:00 PM", nullable=True)
+    status = Column(String(50), default="Consulting") # Consulting, On Break, Emergency Duty
+    experience = Column(String(50), default="10 Years", nullable=True)
+    post = Column(String(100), default="Consultant Physician", nullable=True)
+    matching_keywords = Column(JSON, nullable=True)
+    is_active = Column(Integer, default=1) # 1 = active, 0 = deleted
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)

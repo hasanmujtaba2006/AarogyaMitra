@@ -181,7 +181,7 @@ export default function AbhaCard({
 
             {/* Right: Verified Hologram + Stylized ABDM QR Code */}
             <div className="flex flex-col items-center shrink-0 space-y-1.5 sm:space-y-2">
-              <div className="w-18 h-18 sm:w-24 sm:h-24 bg-white p-1 sm:p-1.5 rounded-lg sm:rounded-xl border-2 border-slate-200 shadow-sm flex flex-col items-center justify-center relative overflow-hidden">
+              <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white p-1 sm:p-1.5 rounded-lg sm:rounded-xl border-2 border-slate-200 shadow-sm flex flex-col items-center justify-center relative overflow-hidden">
                 {/* SVG ABDM Standard QR Code Display */}
                 <svg className="w-full h-full text-slate-800" viewBox="0 0 100 100" fill="currentColor">
                   {/* Outer corner finders */}
