@@ -347,28 +347,6 @@ export default function AuthScreen({
     }
   }
 
-  const handleQuickLoginHasan = () => {
-    const hasanData: PatientInfo = {
-      id: 'demo_hasan',
-      abha_number: '91-8841-9204-7210',
-      abha_address: 'hasan.m@abdm',
-      full_name: 'Hasan Mujtaba',
-      gender: 'M',
-      date_of_birth: '2007-05-14',
-      age: 19,
-      mobile_number: '+919876543210',
-      address: 'Mathurapur, Bareilly',
-      district: 'Bareilly',
-      state: 'Uttar Pradesh',
-      pincode: '243001',
-      blood_group: 'B+',
-      allergies: 'No Known Allergies',
-      auth_method: 'AADHAAR_OTP',
-      verification_status: 'VERIFIED'
-    }
-    onLoginSuccess(hasanData)
-  }
-
   const handleVerifyLogin = async () => {
     setErrorMessage('')
     setSuccessMessage('')
@@ -677,17 +655,6 @@ export default function AuthScreen({
                 )}
               </button>
 
-              {/* 1-Click Quick Demo Login: Hasan Mujtaba */}
-              <div className="pt-1 sm:pt-2">
-                <button
-                  type="button"
-                  onClick={handleQuickLoginHasan}
-                  className="w-full py-3 sm:py-4 px-4 sm:px-6 rounded-xl sm:rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 hover:from-black hover:to-slate-900 border-2 border-slate-700 text-white font-black text-xs sm:text-base md:text-lg flex items-center justify-center gap-2 sm:gap-3 shadow-lg transition-all active:scale-95"
-                >
-                  <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400 shrink-0" />
-                  <span className="truncate">{t('1-Click Demo Login: Hasan Mujtaba (19 Yrs, B+)', 'त्वरित डेमो: हसन मुजतबा (19 वर्ष, बी+)')}</span>
-                </button>
-              </div>
             </div>
           ) : (
             /* Step 2: 6-Digit OTP Verification */
