@@ -79,17 +79,17 @@ export default function LanguageSwitcher({
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl border-2 border-slate-700 bg-slate-800/90 hover:bg-slate-800 text-white text-sm font-extrabold transition-all shadow-md active:scale-95 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+          className="flex items-center gap-1.5 sm:gap-2.5 px-3 sm:px-4 py-1.5 sm:py-2.5 rounded-xl sm:rounded-2xl border sm:border-2 border-slate-700 bg-slate-800/90 hover:bg-slate-800 text-white text-xs sm:text-sm font-extrabold transition-all shadow-md active:scale-95 focus:outline-none focus:ring-2 focus:ring-emerald-400"
           aria-expanded={isOpen}
           aria-haspopup="true"
         >
-          <Globe className="w-4 h-4 text-emerald-400 shrink-0" />
+          <Globe className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400 shrink-0" />
           <span>{currentLangObj.nativeName}</span>
-          <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+          <ChevronDown className={`w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
         </button>
 
         {isOpen && (
-          <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-slate-900 shadow-2xl border-2 border-slate-700 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+          <div className="absolute right-0 mt-2 w-52 sm:w-56 max-w-[calc(100vw-2rem)] rounded-2xl bg-slate-900 shadow-2xl border-2 border-slate-700 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
             <div className="px-3.5 py-1.5 border-b border-slate-800 text-[10px] font-black uppercase tracking-wider text-slate-400">
               Select Language / भाषा चुनें
             </div>
@@ -129,17 +129,17 @@ export default function LanguageSwitcher({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-sm font-extrabold transition-all shadow-sm active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="flex items-center gap-1.5 sm:gap-2.5 px-3 sm:px-4 py-1.5 sm:py-2.5 rounded-xl sm:rounded-2xl border sm:border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-xs sm:text-sm font-extrabold transition-all shadow-sm active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500"
         aria-expanded={isOpen}
         aria-haspopup="true"
       >
-        <Globe className="w-4 h-4 text-blue-800 shrink-0" />
+        <Globe className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-800 shrink-0" />
         <span className="text-xs sm:text-sm">{currentLangObj.nativeName}</span>
         <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-white shadow-2xl border-2 border-slate-200 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+        <div className="absolute right-0 mt-2 w-52 sm:w-56 max-w-[calc(100vw-2rem)] rounded-2xl bg-white shadow-2xl border-2 border-slate-200 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
           <div className="px-3.5 py-1.5 border-b border-slate-100 text-[10px] font-black uppercase tracking-wider text-slate-400">
             Select Language / भाषा चुनें
           </div>

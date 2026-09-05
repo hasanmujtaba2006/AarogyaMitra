@@ -238,6 +238,14 @@ export default function DoctorSelectionAndQueue({
     }
   }
 
+  // Helper to verify if doctor is currently available for consultation (not on Break or Emergency Duty)
+  const isDoctorAvailable = (doc: DoctorItem) => {
+    const st = (doc.status || '').toLowerCase().trim()
+    if (st === 'on break' || st === 'break' || st === 'emergency duty' || st === 'emergency') return false
+    if (doc.on_break || doc.emergency_duty) return false
+    return true
+  }
+
   // Fetch available doctors matching disease from backend API
   const fetchDoctors = async () => {
     try {
@@ -253,9 +261,15 @@ export default function DoctorSelectionAndQueue({
       if (res.ok) {
         const data = await res.json()
         if (data.doctors && data.doctors.length > 0) {
-          setDoctors(data.doctors)
-          if (data.recommended_doctor_id) {
+          // Strictly exclude doctors on Break or Emergency Duty
+          const filtered = data.doctors.filter(isDoctorAvailable)
+          setDoctors(filtered)
+
+          // Set recommended doctor if currently selectable
+          if (data.recommended_doctor_id && filtered.some((d: DoctorItem) => d.id === data.recommended_doctor_id)) {
             setSelectedDoctorId(data.recommended_doctor_id)
+          } else if (filtered.length > 0) {
+            setSelectedDoctorId(prev => (filtered.some((d: DoctorItem) => d.id === prev) ? prev : filtered[0].id))
           }
         }
       }
@@ -290,6 +304,15 @@ export default function DoctorSelectionAndQueue({
     fetchDoctors()
     fetchQueueStatus()
   }, [sessionId])
+
+  // Periodically refresh available doctors list while patient is selecting (not queued yet)
+  useEffect(() => {
+    if (queueState?.is_queued) return
+    const timer = setInterval(() => {
+      fetchDoctors()
+    }, 6000)
+    return () => clearInterval(timer)
+  }, [queueState?.is_queued, sessionId])
 
   useEffect(() => {
     if (!queueState?.is_queued) return
@@ -586,9 +609,29 @@ export default function DoctorSelectionAndQueue({
                 {t('Matching OPD specialist doctors to your symptoms...', 'आपके लक्षणों के अनुसार डॉक्टरों की सूची लोड हो रही है...', 'பொருத்தமான மருத்துவர்களைக் கண்டறிகிறது...', 'వైద్యుల జాబితా లోడ్ అవుతోంది...')}
               </p>
             </div>
+          ) : doctors.filter(isDoctorAvailable).length === 0 ? (
+            <div className="p-8 sm:p-12 text-center bg-white rounded-2xl sm:rounded-3xl border border-amber-200 shadow-xs">
+              <div className="w-14 h-14 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-3 text-amber-700">
+                <Clock className="w-7 h-7" />
+              </div>
+              <h4 className="text-base sm:text-lg font-black text-slate-900">
+                {t('No Doctors Available for Consultation Right Now', 'इस समय कोई डॉक्टर परामर्श के लिए उपलब्ध नहीं है', 'தற்போது மருத்துவர்கள் கிடைக்கவில்லை', 'ప్రస్తుతం వైద్యులు అందుబాటులో లేరు')}
+              </h4>
+              <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-md mx-auto">
+                {t('Specialist doctors are currently on scheduled break or attending urgent emergency cases. Please wait a moment or click Refresh.', 'विशेषज्ञ डॉक्टर वर्तमान में ब्रेक पर हैं या आपातकालीन ड्यूटी में व्यस्त हैं। कृपया प्रतीक्षा करें अथवा रिफ्रेश करें।', 'அனைத்து மருத்துவர்களும் ஓய்வில் அல்லது அவசர சிகிச்சையில் உள்ளனர். சிறிது நேரம் கழித்து மீண்டும் முயற்சிக்கவும்.', 'వైద్యులందరూ విరామంలో లేదా అత్యవసర విధుల్లో ఉన్నారు. దయచేసి కాసేపటి తర్వాత మళ్ళీ ప్రయత్నించండి.')}
+              </p>
+              <button
+                type="button"
+                onClick={fetchDoctors}
+                className="mt-4 px-4 py-2 bg-blue-900 text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 shadow"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>{t('Check Availability Again', 'उपलब्धता पुनः जांचें', 'மீண்டும் சரிபார்க்கவும்', 'మళ్ళీ తనిఖీ చేయండి')}</span>
+              </button>
+            </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {doctors.map((doc) => {
+              {doctors.filter(isDoctorAvailable).map((doc) => {
                 const isRec = doc.is_recommended
                 const isSelected = selectedDoctorId === doc.id
 

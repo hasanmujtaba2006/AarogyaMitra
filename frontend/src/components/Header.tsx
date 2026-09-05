@@ -47,7 +47,7 @@ export default function Header() {
           <nav className="flex items-center gap-0.5 xs:gap-1 sm:gap-2 bg-slate-100/90 p-1 rounded-xl sm:rounded-2xl border border-slate-200/90 w-full sm:w-auto justify-center">
             <Link
               href="/"
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1 xs:gap-1.5 px-2 xs:px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg sm:rounded-xl transition-all text-[11px] xs:text-xs sm:text-sm font-bold ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1 xs:gap-1.5 px-1.5 xs:px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg sm:rounded-xl transition-all text-[10px] xs:text-xs sm:text-sm font-bold ${
                 pathname === '/' 
                   ? 'bg-white text-blue-900 shadow-sm border border-slate-200/80' 
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
@@ -58,7 +58,7 @@ export default function Header() {
             </Link>
             <Link
               href="/doctor"
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1 xs:gap-1.5 px-2 xs:px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg sm:rounded-xl transition-all text-[11px] xs:text-xs sm:text-sm font-bold ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1 xs:gap-1.5 px-1.5 xs:px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg sm:rounded-xl transition-all text-[10px] xs:text-xs sm:text-sm font-bold ${
                 pathname.startsWith('/doctor') 
                   ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80' 
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
@@ -69,7 +69,7 @@ export default function Header() {
             </Link>
             <Link
               href="/admin"
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1 xs:gap-1.5 px-2 xs:px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg sm:rounded-xl transition-all text-[11px] xs:text-xs sm:text-sm font-bold ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1 xs:gap-1.5 px-1.5 xs:px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg sm:rounded-xl transition-all text-[10px] xs:text-xs sm:text-sm font-bold ${
                 pathname.startsWith('/admin')
                   ? 'bg-white text-indigo-900 shadow-sm border border-slate-200/80' 
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'

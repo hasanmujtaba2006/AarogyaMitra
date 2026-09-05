@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { 
@@ -18,6 +18,7 @@ import StructuredClinicalSummaryCard from '@/components/StructuredClinicalSummar
 import { useLanguage } from '@/context/LanguageContext'
 
 export interface PrescribedMed {
+  id?: string;
   name: string;
   dosage: string;
   frequency: string;
@@ -109,6 +110,19 @@ export default function DoctorDashboard() {
   const [showPrintModal, setShowPrintModal] = useState(false)
   const [showTranscript, setShowTranscript] = useState(false)
 
+  // Active consultation session and doctor state references to avoid stale closures in intervals & async fetches
+  const activeSessionIdRef = useRef<string | null>(null)
+  const currentDoctorRef = useRef<any>(null)
+  const doctorStatusRef = useRef<'Consulting' | 'On Break' | 'Emergency Duty'>('Consulting')
+
+  useEffect(() => {
+    currentDoctorRef.current = currentDoctor
+  }, [currentDoctor])
+
+  useEffect(() => {
+    doctorStatusRef.current = doctorStatus
+  }, [doctorStatus])
+
   // Verify authentication on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -129,28 +143,37 @@ export default function DoctorDashboard() {
 
   // Fetch live doctor queue
   const fetchQueue = async (silent = false) => {
-    if (!currentDoctor?.id) return
+    const docId = currentDoctorRef.current?.id || currentDoctor?.id
+    if (!docId) return
     if (!silent) setLoading(true)
     else setRefreshing(true)
     setError('')
 
     try {
-      const res = await fetch(`/api/opd/doctor/${currentDoctor.id}/queue`)
+      const res = await fetch(`/api/opd/doctor/${docId}/queue`)
       if (!res.ok) throw new Error('Failed to load patient queue')
 
       const data = await res.json()
       setWaitingQueue(data.waiting_queue || [])
       
       // Update availability status if changed on server
-      if (data.doctor_status && data.doctor_status !== doctorStatus) {
+      if (data.doctor_status && data.doctor_status !== doctorStatusRef.current) {
         setDoctorStatus(data.doctor_status)
+        doctorStatusRef.current = data.doctor_status
       }
 
-      // If a patient is currently called, load into currentPatient
+      // If a patient is currently called, load into currentPatient ONLY IF DIFFERENT from currently active consultation session
       if (data.current_patient) {
-        // If switching to newly called patient
-        if (!currentPatient || currentPatient.session_id !== data.current_patient.session_id) {
+        if (!activeSessionIdRef.current || activeSessionIdRef.current !== data.current_patient.session_id) {
           loadPatientIntoConsultation(data.current_patient)
+        } else {
+          // Keep currentPatient metadata in sync WITHOUT touching doctor's active form edits (notes, meds, diagnosis)!
+          setCurrentPatient(prev => prev ? {
+            ...prev,
+            queue_status: data.current_patient.queue_status,
+            queue_token: data.current_patient.queue_token,
+            patient: data.current_patient.patient || prev.patient
+          } : data.current_patient)
         }
       }
     } catch (err: any) {
@@ -171,6 +194,7 @@ export default function DoctorDashboard() {
 
   // Load patient clinical data into form
   const loadPatientIntoConsultation = (p: DoctorSessionPatient) => {
+    activeSessionIdRef.current = p.session_id
     setCurrentPatient(p)
     const struct = p.clinical.structured_summary || {}
     
@@ -217,13 +241,14 @@ export default function DoctorDashboard() {
 
   // Handle Availability Status Change (Requirement 11, 12, 13)
   const handleStatusChange = async (newStatus: 'Consulting' | 'On Break' | 'Emergency Duty') => {
-    if (!currentDoctor?.id) return
+    const docId = currentDoctorRef.current?.id || currentDoctor?.id
+    if (!docId) return
     setStatusUpdating(true)
     setMessage('')
     setError('')
 
     try {
-      const res = await fetch(`/api/opd/doctor/${currentDoctor.id}/status`, {
+      const res = await fetch(`/api/opd/doctor/${docId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })
@@ -233,6 +258,7 @@ export default function DoctorDashboard() {
       if (!res.ok) throw new Error(data.detail || 'Failed to update availability status')
 
       setDoctorStatus(newStatus)
+      doctorStatusRef.current = newStatus
       if (typeof window !== 'undefined') {
         const auth = JSON.parse(localStorage.getItem('aarogya_doctor_auth') || '{}')
         if (auth.doctor) {
@@ -293,14 +319,14 @@ export default function DoctorDashboard() {
   const handleAddMedication = () => {
     setMedications(prev => [
       ...prev,
-      { name: '', dosage: '1 Tab', frequency: '1-0-1', duration: '3 days', instructions: 'After meals' }
+      { id: `med_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, name: '', dosage: '1 Tab', frequency: '1-0-1', duration: '3 days', instructions: 'After meals' }
     ])
   }
 
   const handleQuickAddMed = (name: string, dosage: string, freq: string, dur: string, inst: string) => {
     setMedications(prev => [
       ...prev,
-      { name, dosage, frequency: freq, duration: dur, instructions: inst }
+      { id: `med_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, name, dosage, frequency: freq, duration: dur, instructions: inst }
     ])
   }
 
@@ -370,6 +396,16 @@ export default function DoctorDashboard() {
         } catch (e) {}
       }
 
+      // Reset active session and switch back to queue
+      activeSessionIdRef.current = null
+      setCurrentPatient(null)
+      setDiagnosis('')
+      setDoctorNotes('')
+      setMedications([
+        { id: `med_1`, name: 'Tab Pantoprazole 40mg', dosage: '40mg', frequency: '1-0-0', duration: '5 days', instructions: 'Before breakfast' },
+        { id: `med_2`, name: 'Tab Paracetamol 650mg', dosage: '650mg', frequency: '1-0-1', duration: '3 days', instructions: 'After meals' }
+      ])
+      setActiveTab('queue')
       fetchQueue(true)
     } catch (err: any) {
       setError(err.message || 'Error submitting prescription')
@@ -1079,7 +1115,7 @@ export default function DoctorDashboard() {
                         {/* Medication Rows */}
                         <div className="space-y-2">
                           {medications.map((med, idx) => (
-                            <div key={idx} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl grid grid-cols-1 sm:grid-cols-12 gap-2 items-center text-xs">
+                            <div key={med.id || `med-${idx}`} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl grid grid-cols-1 sm:grid-cols-12 gap-2 items-center text-xs">
                               <div className="sm:col-span-4">
                                 <input
                                   type="text"
@@ -1120,14 +1156,15 @@ export default function DoctorDashboard() {
                                   className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs"
                                 />
                               </div>
-                              <div className="sm:col-span-1 text-right">
+                              <div className="sm:col-span-1 flex items-center justify-end sm:justify-center">
                                 <button
                                   type="button"
                                   onClick={() => handleRemoveMedication(idx)}
-                                  className="p-1 text-slate-400 hover:text-rose-600 transition"
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition flex items-center gap-1 text-xs"
                                   title="Remove medicine"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
+                                  <span className="sm:hidden text-rose-600 font-bold">Remove</span>
                                 </button>
                               </div>
                             </div>
@@ -1209,22 +1246,24 @@ export default function DoctorDashboard() {
           ABHA CARD MODAL (Requirement 9)
          ========================================================= */}
       {showAbhaModal && patientForAbhaCard && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-indigo-700" />
-                <span>Ayushman Bharat Health Account (ABHA)</span>
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden max-h-[92vh] flex flex-col p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-3 sm:mb-4">
+              <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-700 shrink-0" />
+                <span className="truncate">Ayushman Bharat Health Account (ABHA)</span>
               </h3>
-              <button onClick={() => setShowAbhaModal(false)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setShowAbhaModal(false)} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100">
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <AbhaCard patient={patientForAbhaCard} />
-            <div className="mt-4 text-center">
+            <div className="overflow-y-auto flex-1">
+              <AbhaCard patient={patientForAbhaCard} />
+            </div>
+            <div className="mt-3 sm:mt-4 text-center shrink-0">
               <button
                 onClick={() => setShowAbhaModal(false)}
-                className="px-5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold"
+                className="w-full sm:w-auto px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition"
               >
                 Close ABHA Card
               </button>

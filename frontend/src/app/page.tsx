@@ -15,7 +15,8 @@ import {
   Clock,
   RefreshCw,
   Pill,
-  Eye
+  Eye,
+  Globe
 } from 'lucide-react'
 
 import Header from '@/components/Header'
@@ -818,8 +819,9 @@ export default function KioskPage() {
                   <button
                     type="button"
                     onClick={() => setPhase('language_select')}
-                    className="text-sm font-black text-blue-700 hover:text-blue-900 underline flex items-center gap-1.5"
+                    className="text-sm font-black text-blue-700 hover:text-blue-900 underline flex items-center gap-1.5 transition-colors"
                   >
+                    <Globe className="w-4 h-4 shrink-0" />
                     <span>{t('Change Preferred Language', 'भाषा बदलें', 'மொழியை மாற்றவும்', 'భాషను మార్చండి')}</span>
                   </button>
                 </div>

@@ -839,6 +839,11 @@ def get_available_doctors(
     doctor_list = []
     if db_doctors:
         for d in db_doctors:
+            status_norm = (d.status or "Consulting").strip().lower()
+            # Doctors on Break or Emergency Duty must NOT be shown on patient selection screen
+            if status_norm in ["on break", "emergency duty", "emergency", "break"]:
+                continue
+
             keywords = d.matching_keywords if isinstance(d.matching_keywords, list) else []
             if not keywords:
                 keywords = [d.specialization.lower(), d.department.lower()]
@@ -852,10 +857,10 @@ def get_available_doctors(
                 "fee": d.fee or "₹0 (Free Govt Kiosk Service)",
                 "department": d.department,
                 "experience": d.experience or "10 Years",
-                "available_today": d.status != "Emergency Duty",
-                "status": d.status,
-                "on_break": d.status == "On Break",
-                "emergency_duty": d.status == "Emergency Duty",
+                "available_today": True,
+                "status": d.status or "Consulting",
+                "on_break": False,
+                "emergency_duty": False,
                 "avatar": d.profile_photo or "👨‍⚕️",
                 "matching_keywords": keywords
             })
@@ -887,10 +892,6 @@ def get_available_doctors(
             if kw in search_context:
                 score += 1
                 matched_tags.append(kw)
-        
-        # Don't recommend doctor if on Emergency Duty
-        if doc.get("emergency_duty"):
-            score = -10
 
         if score > max_score and score > 0:
             max_score = score
@@ -905,23 +906,17 @@ def get_available_doctors(
             "is_recommended": False
         })
 
-    # If no specific match or best doctor is on Emergency Duty, find first available Consulting doctor
-    if not best_doc_id:
-        for r in results:
-            if not r.get("emergency_duty") and not r.get("on_break"):
-                best_doc_id = r["id"]
-                break
-        if not best_doc_id and results:
-            best_doc_id = results[0]["id"]
+    # If no specific match, find first available Consulting doctor
+    if not best_doc_id and results:
+        best_doc_id = results[0]["id"]
 
     for r in results:
         if r["id"] == best_doc_id:
             r["is_recommended"] = True
 
-    # Sort so recommended doctor is at top, emergency duty at bottom, then by queue count
+    # Sort so recommended doctor is at top, then by queue count
     results.sort(key=lambda x: (
         not x["is_recommended"],
-        x.get("emergency_duty", False),
         -x["match_score"],
         x["current_queue_count"]
     ))
@@ -974,10 +969,12 @@ def queue_patient_to_doctor(payload: DoctorQueueRequest, db: Session = Depends(g
     reroute_message = ""
     original_doctor_name = target_doctor_name
 
-    # Check if chosen doctor is on Emergency Duty
+    # Check if chosen doctor is on Emergency Duty or On Break
     doc_in_db = db.query(Doctor).filter(Doctor.id == target_doctor_id, Doctor.is_active == 1).first()
-    if doc_in_db and doc_in_db.status == "Emergency Duty":
+    status_norm = (doc_in_db.status or "Consulting").strip().lower() if doc_in_db else "consulting"
+    if doc_in_db and status_norm in ["emergency duty", "emergency", "on break", "break"]:
         auto_routed = True
+        status_label = "on Break" if "break" in status_norm else "on Emergency Duty"
         # Find another active doctor with status Consulting (prefer same department or General Medicine)
         fallback_doc = db.query(Doctor).filter(
             Doctor.id != target_doctor_id,
@@ -995,9 +992,9 @@ def queue_patient_to_doctor(payload: DoctorQueueRequest, db: Session = Depends(g
             target_doctor_post = fallback_doc.post
             target_doctor_room = fallback_doc.room_number
             target_doctor_fee = fallback_doc.fee
-            reroute_message = f"Notice: Dr. {doc_in_db.full_name} is on Emergency Duty. You have been auto-routed to Dr. {fallback_doc.full_name} in Cabin {fallback_doc.room_number}."
+            reroute_message = f"Notice: Dr. {doc_in_db.full_name} is currently {status_label}. You have been auto-routed to Dr. {fallback_doc.full_name} in Cabin {fallback_doc.room_number}."
         else:
-            reroute_message = f"Notice: Dr. {doc_in_db.full_name} is on Emergency Duty. Consultation will be handled on urgent clinical priority."
+            reroute_message = f"Notice: Dr. {doc_in_db.full_name} is currently {status_label}. Consultation will be handled on urgent clinical priority."
 
     # If already queued for this doctor, return existing token
     if session.assigned_doctor_id == target_doctor_id and session.queue_token:
