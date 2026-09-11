@@ -47,6 +47,9 @@ type PatientTab = 'profile' | 'scan_prescription' | 'doctor_ai' | 'medical_recor
 export default function KioskPage() {
   const { language, setLanguage, setHasLoggedIn, t } = useLanguage()
 
+  // Conversational language specifically for AI doctor consultation (independent of overall App Language)
+  const [conversationLanguage, setConversationLanguage] = useState<LanguageCode>(language)
+
   // Session configuration
   const [sessionId, setSessionId] = useState('')
   const [patient, setPatient] = useState<PatientInfo | null>(null)
@@ -83,6 +86,7 @@ export default function KioskPage() {
 
       if (savedLang && ['en', 'hi', 'ta', 'te'].includes(savedLang)) {
         setLanguage(savedLang)
+        setConversationLanguage(savedLang)
       }
 
       if (savedOcr) {
@@ -128,6 +132,7 @@ export default function KioskPage() {
 
   const handleLanguageSelected = (chosenLang: LanguageCode) => {
     setLanguage(chosenLang)
+    setConversationLanguage(chosenLang)
     setPhase('login')
   }
 
@@ -208,7 +213,7 @@ export default function KioskPage() {
         body: JSON.stringify({
           session_id: sessionId,
           message: text,
-          language: language
+          language: conversationLanguage
         })
       })
 
@@ -219,7 +224,7 @@ export default function KioskPage() {
       const data = await res.json()
       
       // Update chat message history with LLM response
-      const assistantSpokenLang = data.spoken_language || language
+      const assistantSpokenLang = data.spoken_language || conversationLanguage
       setMessages(prev => [...prev, {
         role: 'assistant',
         message: data.response,
@@ -227,9 +232,9 @@ export default function KioskPage() {
         spoken_language: assistantSpokenLang
       }])
 
-      // Auto-sync frontend language if user spoke in Hindi/Tamil/Telugu
-      if (assistantSpokenLang && assistantSpokenLang !== language) {
-        setLanguage(assistantSpokenLang as LanguageCode)
+      // Auto-sync conversational language if user spoke in Hindi/Tamil/Telugu (does NOT affect app language)
+      if (assistantSpokenLang && assistantSpokenLang !== conversationLanguage) {
+        setConversationLanguage(assistantSpokenLang as LanguageCode)
       }
 
       // Check if triage was triggered
@@ -255,7 +260,7 @@ export default function KioskPage() {
         const isTamil = /[\u0B80-\u0BFF]/.test(text) || /\b(vali|kaichal|irumal|sali|vayiru|mayakkam|illai)\b/.test(lowerText)
         const isTelugu = /[\u0C00-\u0C7F]/.test(text) || /\b(noppi|kadupu|jwaram|daggu|ledu)\b/.test(lowerText)
 
-        let targetLang = language
+        let targetLang = conversationLanguage
         if (isHindi) targetLang = 'hi'
         else if (isTamil) targetLang = 'ta'
         else if (isTelugu) targetLang = 'te'
@@ -295,8 +300,8 @@ export default function KioskPage() {
           spoken_language: targetLang
         }])
 
-        if (targetLang !== language) {
-          setLanguage(targetLang as LanguageCode)
+        if (targetLang !== conversationLanguage) {
+          setConversationLanguage(targetLang as LanguageCode)
         }
         
         // Mock triage if chest pain is mentioned
@@ -709,7 +714,7 @@ export default function KioskPage() {
                   {isConsultationFinished ? (
                     <div className="w-full max-w-4xl space-y-6">
                       {/* Top success announcement banner */}
-                      <div className="bg-gradient-to-r from-emerald-600 via-teal-700 to-blue-900 text-white p-4 sm:p-7 rounded-2xl sm:rounded-3xl shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
+                      <div className="bg-gradient-to-r from-emerald-600 via-teal-700 to-blue-900 text-white p-4 sm:p-7 rounded-2xl sm:rounded-3xl shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left print:hidden">
                         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-3 sm:gap-4">
                           <div className="p-2.5 sm:p-3 bg-white/20 backdrop-blur-md rounded-2xl shrink-0">
                             <CheckCircle2 className="w-7 h-7 sm:w-10 sm:h-10 text-emerald-200" />
@@ -737,10 +742,12 @@ export default function KioskPage() {
                       </div>
 
                       {/* 1. Structured Clinical History Executive Card */}
-                      <StructuredClinicalSummaryCard
-                        data={structuredSummary}
-                        rawText={sessionSummary}
-                      />
+                      <div className="print:hidden">
+                        <StructuredClinicalSummaryCard
+                          data={structuredSummary}
+                          rawText={sessionSummary}
+                        />
+                      </div>
 
                       {/* 2. Doctor Directory, Selection according to illness, Queue Token & Tracker */}
                       <DoctorSelectionAndQueue
@@ -756,10 +763,11 @@ export default function KioskPage() {
                     <div className="w-full flex flex-col items-center">
                       <AudioMic
                         language={language}
+                        conversationLanguage={conversationLanguage}
                         messages={messages}
                         onSendMessage={submitMessageToChat}
                         isProcessing={isProcessing}
-                        onLanguageChange={setLanguage}
+                        onConversationLanguageChange={setConversationLanguage}
                       />
                       
                       <div className="mt-3 sm:mt-4 flex items-center justify-center w-full">

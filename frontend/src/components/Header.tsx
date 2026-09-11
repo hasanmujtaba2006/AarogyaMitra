@@ -20,6 +20,7 @@ export default function Header() {
               src="/logos/aarogyamlogo.png"
               alt="AarogyaMitra Logo"
               className="h-7 xs:h-8 sm:h-10 md:h-11 w-auto object-contain transition-transform group-hover:scale-105 shrink-0"
+              style={{ maxHeight: '44px', width: 'auto' }}
             />
             <div className="h-6 sm:h-8 w-px bg-slate-200 hidden xs:block"></div>
             <div className="flex flex-col min-w-0">
@@ -38,6 +39,7 @@ export default function Header() {
               src="/logos/abdm-logo.png"
               alt="Ayushman Bharat Digital Mission"
               className="h-7 xs:h-8 sm:h-10 w-auto object-contain"
+              style={{ maxHeight: '40px', width: 'auto' }}
             />
           </div>
         </div>
@@ -87,6 +89,7 @@ export default function Header() {
             src="/logos/abdm-logo.png"
             alt="Ayushman Bharat Digital Mission"
             className="h-12 lg:h-14 w-auto object-contain"
+            style={{ maxHeight: '56px', width: 'auto' }}
           />
         </div>
 

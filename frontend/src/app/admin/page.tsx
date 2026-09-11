@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
+import { extractErrorMessage } from '@/lib/errorUtils'
 
 interface DoctorItem {
   id: string;
@@ -186,7 +187,7 @@ export default function AdminDashboardPage() {
 
       const data = await res.json()
       if (!res.ok) {
-        throw new Error(data.detail || 'Failed to create doctor profile')
+        throw new Error(extractErrorMessage(data, 'Failed to create doctor profile'))
       }
 
       setActionSuccess(`Doctor profile for ${newDoc.full_name} created successfully!`)
@@ -208,7 +209,7 @@ export default function AdminDashboardPage() {
       })
       fetchDashboardData(true)
     } catch (err: any) {
-      setActionError(err.message || 'Error adding doctor')
+      setActionError(extractErrorMessage(err, 'Error adding doctor profile. Please verify input fields.'))
     }
   }
 
@@ -235,13 +236,13 @@ export default function AdminDashboardPage() {
       })
 
       const data = await res.json()
-      if (!res.ok) throw new Error(data.detail || 'Failed to update doctor profile')
+      if (!res.ok) throw new Error(extractErrorMessage(data, 'Failed to update doctor profile'))
 
       setActionSuccess(`Updated doctor profile for ${editDoc.full_name || selectedDoctor.full_name}!`)
       setShowEditModal(false)
       fetchDashboardData(true)
     } catch (err: any) {
-      setActionError(err.message || 'Error updating doctor profile')
+      setActionError(extractErrorMessage(err, 'Error updating doctor profile. Please check details.'))
     }
   }
 
@@ -265,7 +266,7 @@ export default function AdminDashboardPage() {
       setSelectedDoctor(null)
       fetchDashboardData(true)
     } catch (err: any) {
-      setActionError(err.message || 'Error removing doctor')
+      setActionError(extractErrorMessage(err, 'Error removing doctor. Please try again.'))
     }
   }
 
@@ -781,23 +782,25 @@ export default function AdminDashboardPage() {
                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                       Profile Avatar / Photo
                     </label>
-                    <div className="flex items-center gap-2">
-                      {['👨‍⚕️', '👩‍⚕️', '🩺', '👨🏽‍⚕️', '👩🏽‍⚕️'].map(emoji => (
-                        <button
-                          key={emoji}
-                          type="button"
-                          onClick={() => setNewDoc({ ...newDoc, profile_photo: emoji })}
-                          className={`w-10 h-10 rounded-xl border text-xl flex items-center justify-center transition ${newDoc.profile_photo === emoji ? 'border-indigo-600 bg-indigo-50 shadow-sm scale-105' : 'border-slate-200 hover:bg-slate-50'}`}
-                        >
-                          {emoji}
-                        </button>
-                      ))}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-1.5 xs:gap-2">
+                        {['👨‍⚕️', '👩‍⚕️', '🩺', '👨🏽‍⚕️', '👩🏽‍⚕️'].map(emoji => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            onClick={() => setNewDoc({ ...newDoc, profile_photo: emoji })}
+                            className={`w-9 h-9 xs:w-10 xs:h-10 rounded-xl border text-lg xs:text-xl flex items-center justify-center transition ${newDoc.profile_photo === emoji ? 'border-indigo-600 bg-indigo-50 shadow-sm scale-105' : 'border-slate-200 hover:bg-slate-50'}`}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
                       <input
                         type="text"
                         value={newDoc.profile_photo}
                         onChange={(e) => setNewDoc({ ...newDoc, profile_photo: e.target.value })}
                         placeholder="Or image URL"
-                        className="flex-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs"
+                        className="flex-1 min-w-[140px] px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs"
                       />
                     </div>
                   </div>

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
+import { extractErrorMessage } from '@/lib/errorUtils'
 
 export default function AdminLoginPage() {
   const router = useRouter()
@@ -32,7 +33,7 @@ export default function AdminLoginPage() {
       const data = await res.json()
 
       if (!res.ok) {
-        throw new Error(data.detail || 'Invalid admin credentials')
+        throw new Error(extractErrorMessage(data, 'Invalid admin credentials'))
       }
 
       setSuccess('Admin authentication successful! Redirecting to Control Center...')
@@ -48,7 +49,7 @@ export default function AdminLoginPage() {
         router.push('/admin')
       }, 700)
     } catch (err: any) {
-      setError(err.message || 'Login failed. Please verify credentials.')
+      setError(extractErrorMessage(err, 'Login failed. Please verify credentials.'))
     } finally {
       setLoading(false)
     }
@@ -58,8 +59,8 @@ export default function AdminLoginPage() {
     <div className="min-h-screen bg-slate-50 flex flex-col justify-between font-sans">
       <Header />
 
-      <main className="container mx-auto px-4 py-8 sm:py-12 flex-1 flex items-center justify-center">
-        <div className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-slate-200 p-6 sm:p-8">
+      <main className="container mx-auto px-3 sm:px-4 py-6 sm:py-12 flex-1 flex items-center justify-center">
+        <div className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-slate-200 p-4 xs:p-6 sm:p-8">
           
           {/* Top Shield Header */}
           <div className="text-center mb-6">

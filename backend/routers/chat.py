@@ -11,6 +11,7 @@ from database import get_db
 from models import PatientSession, InterviewHistory, Doctor
 from utils.bhashini_mock import translate_text
 from utils.fhir_gen import generate_fhir_bundle
+from utils.queue_token import generate_unique_queue_token
 from typing import Optional, List, Dict, Any
 from schemas import ClinicalUpdateRequest, DoctorQueueRequest, CallPatientRequest
 
@@ -1014,15 +1015,8 @@ def queue_patient_to_doctor(payload: DoctorQueueRequest, db: Session = Depends(g
             }
         }
 
-    # Generate sequential token for this room today
-    today_start = datetime.datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-    existing_for_room = db.query(PatientSession).filter(
-        PatientSession.assigned_doctor_room == target_doctor_room,
-        PatientSession.queue_assigned_at >= today_start
-    ).count()
-
-    token_number = existing_for_room + 1
-    queue_token = f"OPD-{target_doctor_room}-{token_number:02d}"
+    # Generate guaranteed-unique sequential token for this room and doctor
+    queue_token = generate_unique_queue_token(db, target_doctor_room, target_doctor_id)
 
     session.assigned_doctor_id = target_doctor_id
     session.assigned_doctor_name = target_doctor_name
@@ -1116,7 +1110,22 @@ def call_patient_to_room(payload: CallPatientRequest, db: Session = Depends(get_
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
+    # Demote any previously called patient for this doctor or room back to 'waiting'
+    if session.assigned_doctor_id:
+        db.query(PatientSession).filter(
+            PatientSession.assigned_doctor_id == session.assigned_doctor_id,
+            PatientSession.id != session.id,
+            PatientSession.queue_status == "called"
+        ).update({"queue_status": "waiting"})
+    if session.assigned_doctor_room:
+        db.query(PatientSession).filter(
+            PatientSession.assigned_doctor_room == session.assigned_doctor_room,
+            PatientSession.id != session.id,
+            PatientSession.queue_status == "called"
+        ).update({"queue_status": "waiting"})
+
     session.queue_status = "called"
+    session.queue_assigned_at = datetime.datetime.utcnow()
     db.commit()
     db.refresh(session)
 

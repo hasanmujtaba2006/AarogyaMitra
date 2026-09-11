@@ -22,6 +22,7 @@ class AbhaUser(Base):
     blood_group = Column(String(10), default="B+", nullable=True) # e.g. B+, O+, A+
     allergies = Column(Text, default="No Known Allergies", nullable=True) # e.g. No Known Allergies
     profile_photo = Column(Text, nullable=True) # Base64 data URL or photo link
+    login_pin = Column(String(10), default="123456", nullable=True) # 6-digit PIN for instant kiosk login
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     sessions = relationship("PatientSession", back_populates="patient")

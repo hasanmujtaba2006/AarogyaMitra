@@ -7,6 +7,7 @@ import {
   Camera, Upload, Smartphone, RefreshCw, ArrowLeft, Check
 } from 'lucide-react'
 import AbhaCard, { PatientInfo } from '@/components/AbhaCard'
+import { extractErrorMessage } from '@/lib/errorUtils'
 
 interface AbhaSectionProps {
   language: string;
@@ -119,7 +120,7 @@ export default function AbhaSection({ language, setLanguage, onLoginSuccess }: A
 
       const data = await res.json()
       if (!res.ok) {
-        throw new Error(data.detail || 'Failed to initialize ABHA authentication')
+        throw new Error(extractErrorMessage(data, 'Failed to initialize ABHA authentication'))
       }
 
       setTxnId(data.txn_id)
@@ -127,7 +128,7 @@ export default function AbhaSection({ language, setLanguage, onLoginSuccess }: A
       setResendTimer(60)
       setStep('otp')
     } catch (err: any) {
-      setError(err.message || 'Something went wrong while connecting to ABDM')
+      setError(extractErrorMessage(err, 'Something went wrong while connecting to ABDM. Please try again.'))
     } finally {
       setLoading(false)
     }
@@ -156,13 +157,13 @@ export default function AbhaSection({ language, setLanguage, onLoginSuccess }: A
 
       const data = await res.json()
       if (!res.ok) {
-        throw new Error(data.detail || 'Invalid OTP. Please check and try again.')
+        throw new Error(extractErrorMessage(data, 'Invalid OTP. Please check and try again.'))
       }
 
       setPatientInfo(data.patient)
       setStep('success')
     } catch (err: any) {
-      setError(err.message || 'Verification failed. Try using demo OTP 123456')
+      setError(extractErrorMessage(err, 'Verification failed. Please check the OTP code.'))
     } finally {
       setLoading(false)
     }
@@ -187,13 +188,13 @@ export default function AbhaSection({ language, setLanguage, onLoginSuccess }: A
 
       const data = await res.json()
       if (!res.ok) {
-        throw new Error(data.detail || 'Failed to parse ABDM QR code')
+        throw new Error(extractErrorMessage(data, 'Failed to parse ABDM QR code'))
       }
 
       setPatientInfo(data.patient)
       setStep('success')
     } catch (err: any) {
-      setError(err.message || 'Invalid ABDM QR format. Try clicking one of the sample presets.')
+      setError(extractErrorMessage(err, 'Invalid ABDM QR format. Please scan a valid ABHA card QR.'))
     } finally {
       setLoading(false)
     }

@@ -19,6 +19,7 @@ import {
   KeyRound
 } from 'lucide-react'
 import { PatientInfo } from '@/components/AbhaCard'
+import { extractErrorMessage } from '@/lib/errorUtils'
 
 interface PhoneAuthKioskProps {
   onSuccess: (patient: PatientInfo) => void;
@@ -162,7 +163,7 @@ export default function PhoneAuthKiosk({
           'नेटवर्क त्रुटि। कृपया इंटरनेट कनेक्शन की जांच करें।'
         )
       default:
-        return msg || t('Authentication failed. Please try again.', 'सत्यापन विफल रहा। पुनः प्रयास करें।')
+        return extractErrorMessage(error, t('Authentication failed. Please try again.', 'सत्यापन विफल रहा। पुनः प्रयास करें।'))
     }
   }
 
@@ -288,7 +289,7 @@ export default function PhoneAuthKiosk({
 
       const data = await res.json()
       if (!res.ok) {
-        throw new Error(data.detail || data.message || 'Backend verification failed')
+        throw new Error(extractErrorMessage(data, 'Backend verification failed'))
       }
 
       // 4. Store token in browser storage

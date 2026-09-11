@@ -16,7 +16,8 @@ import {
   Volume2,
   Building2,
   CreditCard,
-  Siren
+  Siren,
+  Printer
 } from 'lucide-react'
 import { useLanguage } from '@/context/LanguageContext'
 import { StructuredClinicalData } from './StructuredClinicalSummaryCard'
@@ -185,6 +186,23 @@ export default function DoctorSelectionAndQueue({
   const [isAlertPlaying, setIsAlertPlaying] = useState(false)
   const [hasNotifiedCall, setHasNotifiedCall] = useState(false)
   const audioContextRef = useRef<any>(null)
+
+  // Dedicated Print Token Handler (Isolates only the token ticket)
+  const handlePrintToken = () => {
+    document.body.classList.add('printing-token-slip')
+    window.print()
+  }
+
+  useEffect(() => {
+    const handleAfterPrint = () => {
+      document.body.classList.remove('printing-token-slip')
+    }
+    window.addEventListener('afterprint', handleAfterPrint)
+    return () => {
+      window.removeEventListener('afterprint', handleAfterPrint)
+      document.body.classList.remove('printing-token-slip')
+    }
+  }, [])
 
   // Determine initial recommended doctor from symptoms immediately on client
   useEffect(() => {
@@ -472,7 +490,7 @@ export default function DoctorSelectionAndQueue({
 
           {/* AUTO-ROUTED EMERGENCY DUTY BANNER */}
           {queueState.auto_routed && (
-            <div className="p-4 bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 text-white rounded-2xl sm:rounded-3xl shadow-lg border-2 border-amber-300 flex items-center gap-3.5 animate-fadeIn">
+            <div className="p-4 bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 text-white rounded-2xl sm:rounded-3xl shadow-lg border-2 border-amber-300 flex items-center gap-3.5 animate-fadeIn print:hidden">
               <div className="p-2.5 bg-white/20 rounded-2xl shrink-0">
                 <Siren className="w-6 h-6 text-yellow-200 animate-pulse" />
               </div>
@@ -486,7 +504,10 @@ export default function DoctorSelectionAndQueue({
           )}
 
           {/* MAIN QUEUE TRACKER TICKET */}
-          <div className="bg-white rounded-2xl sm:rounded-3xl border-2 sm:border-4 border-blue-900 shadow-xl overflow-hidden">
+          <div 
+            id="opd-token-ticket" 
+            className="bg-white rounded-2xl sm:rounded-3xl border-2 sm:border-4 border-blue-900 shadow-xl overflow-hidden print:max-w-[540px] print:w-[540px] print:mx-auto print:my-4 print:border-2 print:border-blue-900 print:shadow-none break-inside-avoid print-avoid-break"
+          >
             <div className="bg-gradient-to-r from-blue-950 via-blue-900 to-indigo-900 p-4 sm:p-7 text-white flex flex-col sm:flex-row justify-between items-center gap-3 sm:gap-4 text-center sm:text-left">
               <div>
                 <span className="bg-blue-800/80 text-blue-200 text-[10px] sm:text-xs font-black uppercase tracking-wider px-2.5 sm:px-3 py-1 rounded-full border border-blue-700">
@@ -550,8 +571,18 @@ export default function DoctorSelectionAndQueue({
                 <span>{t('Live Queue Status Active • Auto-refreshing every 3s', 'लाइव कतार स्थिति सक्रिय • हर 3 सेकंड में स्वतः अपडेट', 'நேரலை கண்காணிப்பு • 3 வினாடிகளில் புதுப்பிக்கப்படுகிறது', 'లైవ్ క్యూ యాక్టివ్ • ప్రతి 3 సెకన్లకు రిఫ్రెష్')}</span>
               </div>
 
+              {/* Printable Official Slip Footer */}
+              <div className="hidden print:block w-full pt-3 mt-1 border-t border-slate-200 text-center text-[11px] text-slate-500 font-bold">
+                <span>{t('Government Health Kiosk Official OPD Token Slip', 'सरकारी स्वास्थ्य कियोस्क आधिकारिक ओपीडी पर्ची')}</span>
+                {patientName && (
+                  <span className="block mt-0.5 text-slate-700">
+                    Patient: <strong>{patientName}</strong> {abhaId ? `• ABHA: ${abhaId}` : ''}
+                  </span>
+                )}
+              </div>
+
               {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row gap-2.5 sm:gap-3 w-full sm:w-auto justify-center pt-2">
+              <div className="flex flex-col sm:flex-row gap-2.5 sm:gap-3 w-full sm:w-auto justify-center pt-2 print:hidden">
                 <button
                   onClick={onViewMedicalRecords}
                   className="w-full sm:w-auto h-12 sm:h-14 px-5 sm:px-6 bg-blue-900 hover:bg-blue-950 text-white font-black text-xs sm:text-base rounded-xl sm:rounded-2xl shadow-md flex items-center justify-center gap-2 transition-all active:scale-95"
@@ -561,9 +592,10 @@ export default function DoctorSelectionAndQueue({
                 </button>
 
                 <button
-                  onClick={() => window.print()}
+                  onClick={handlePrintToken}
                   className="w-full sm:w-auto h-12 sm:h-14 px-4 sm:px-5 bg-white hover:bg-slate-100 text-slate-800 font-extrabold text-xs sm:text-base rounded-xl sm:rounded-2xl border border-slate-300 shadow-xs flex items-center justify-center gap-2 active:scale-95"
                 >
+                  <Printer className="w-4 h-4 text-slate-700 shrink-0" />
                   <span>{t('Print Token Slip', 'टोकन पर्ची प्रिंट करें', 'டோக்கன் அச்சிடுக', 'టోకెన్ ప్రింట్ చేయండి')}</span>
                 </button>
               </div>

@@ -71,6 +71,9 @@ def migrate_database():
                 conn.execute(text("ALTER TABLE abha_users ADD COLUMN allergies TEXT DEFAULT 'No Known Allergies'"))
             if "profile_photo" not in abha_cols:
                 conn.execute(text("ALTER TABLE abha_users ADD COLUMN profile_photo TEXT"))
+            if "login_pin" not in abha_cols:
+                conn.execute(text("ALTER TABLE abha_users ADD COLUMN login_pin VARCHAR(10) DEFAULT '123456'"))
+                print("Migration: Added column login_pin to abha_users")
             conn.commit()
 
 try:
@@ -90,6 +93,20 @@ try:
     _init_db.close()
 except Exception as e:
     print(f"Doctor seed warning: {e}")
+
+# Deduplicate any conflicting patient tokens across rooms
+try:
+    from database import SessionLocal
+    from utils.queue_token import deduplicate_sessions_for_room
+    from models import Doctor, PatientSession
+    _dedup_db = SessionLocal()
+    doc_rooms = [d.room_number for d in _dedup_db.query(Doctor).all() if d.room_number]
+    sess_rooms = [r[0] for r in _dedup_db.query(PatientSession.assigned_doctor_room).distinct().all() if r[0]]
+    for rm in set(doc_rooms + sess_rooms):
+        deduplicate_sessions_for_room(_dedup_db, rm)
+    _dedup_db.close()
+except Exception as e:
+    print(f"Token deduplication notice: {e}")
 
 import asyncio
 import logging

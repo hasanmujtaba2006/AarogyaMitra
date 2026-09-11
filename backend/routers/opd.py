@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+import re
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -14,6 +15,7 @@ from schemas import (
     ClinicalUpdateRequest
 )
 from routers.chat import AVAILABLE_DOCTORS, generate_fhir_bundle
+from utils.queue_token import generate_unique_queue_token, deduplicate_sessions_for_room
 
 logger = logging.getLogger("opd_router")
 
@@ -454,6 +456,10 @@ def get_doctor_patient_queue(doctor_id: str, db: Session = Depends(get_db)):
     is_on_break = doctor_status == "On Break"
     is_emergency_duty = doctor_status == "Emergency Duty"
 
+    # Auto-heal any duplicate tokens for this doctor's room before querying
+    if doctor:
+        deduplicate_sessions_for_room(db, doctor.room_number)
+
     # Query sessions assigned to this doctor
     sessions = db.query(PatientSession).filter(
         PatientSession.assigned_doctor_id == doctor_id
@@ -532,9 +538,19 @@ def get_doctor_patient_queue(doctor_id: str, db: Session = Depends(get_db)):
                 "timestamp": ch.timestamp.isoformat() if ch.timestamp else None
             })
 
+        # Ensure session has a unique valid token
+        assigned_token = s.queue_token
+        if not assigned_token:
+            assigned_token = generate_unique_queue_token(db, doctor.room_number if doctor else "101", doctor_id)
+            s.queue_token = assigned_token
+            try:
+                db.commit()
+            except Exception:
+                pass
+
         patient_obj = {
             "session_id": s.id,
-            "queue_token": s.queue_token or f"OPD-{doctor.room_number if doctor else '101'}-01",
+            "queue_token": assigned_token,
             "queue_status": s.queue_status or "waiting",
             "queue_assigned_at": s.queue_assigned_at.isoformat() if s.queue_assigned_at else s.created_at.isoformat() if s.created_at else None,
             "patient": {
@@ -567,21 +583,68 @@ def get_doctor_patient_queue(doctor_id: str, db: Session = Depends(get_db)):
                 "doctor_notes": s.doctor_notes,
                 "doctor_prescription": s.doctor_prescription,
                 "chat_history": chat_hist
-            }
+            },
+            "previous_records_count": db.query(PatientSession).filter(
+                PatientSession.abha_id == patient_rec.id,
+                PatientSession.id != s.id,
+                or_(
+                    PatientSession.doctor_prescription.isnot(None),
+                    PatientSession.doctor_notes.isnot(None),
+                    PatientSession.ocr_text.isnot(None),
+                    PatientSession.status == "completed",
+                    PatientSession.queue_status == "completed"
+                )
+            ).count() if patient_rec else 0
         }
 
         if s.queue_status == "called":
-            # Most recently called patient is current patient
+            # Only the first (most recent) called patient is current patient in cabin
             if not called_patient:
                 called_patient = patient_obj
             else:
+                # Demote any stale previously called session back to waiting
+                s.queue_status = "waiting"
+                patient_obj["queue_status"] = "waiting"
                 waiting_list.append(patient_obj)
+                try:
+                    db.commit()
+                except Exception:
+                    pass
         elif s.queue_status == "waiting":
             waiting_list.append(patient_obj)
         elif s.queue_status in ["completed", "attended"]:
             completed_list.append(patient_obj)
         else:
             waiting_list.append(patient_obj)
+
+    # 1. Sort waiting_list by clinical priority (Red > Yellow > Green), then arrival time
+    triage_priority_map = {"red": 0, "yellow": 1, "green": 2}
+    def waiting_sort_key(p):
+        cat = p.get("clinical", {}).get("ai_triage_category", "green")
+        priority = triage_priority_map.get(cat, 3)
+        assigned_at = p.get("queue_assigned_at") or "9999-12-31"
+        return (priority, assigned_at)
+
+    waiting_list.sort(key=waiting_sort_key)
+
+    # 2. Final collision guarantee: ensure all tokens in waiting_queue and called_patient are strictly unique
+    seen_tokens = set()
+    if called_patient and called_patient.get("queue_token"):
+        seen_tokens.add(called_patient["queue_token"])
+
+    for p in waiting_list:
+        cur_tok = p.get("queue_token")
+        if not cur_tok or cur_tok in seen_tokens:
+            new_tok = generate_unique_queue_token(db, doctor.room_number if doctor else "101", doctor_id)
+            p["queue_token"] = new_tok
+            sess = db.query(PatientSession).filter(PatientSession.id == p["session_id"]).first()
+            if sess:
+                sess.queue_token = new_tok
+                try:
+                    db.commit()
+                except Exception:
+                    pass
+        seen_tokens.add(p["queue_token"])
 
     return {
         "doctor_id": doctor_id,
@@ -607,7 +670,23 @@ def call_patient(payload: CallPatientRequest, db: Session = Depends(get_db)):
     if not session:
         raise HTTPException(status_code=404, detail="Patient session not found")
 
+    # 1. Demote any previously called patient for this doctor or room back to 'waiting'
+    if session.assigned_doctor_id:
+        db.query(PatientSession).filter(
+            PatientSession.assigned_doctor_id == session.assigned_doctor_id,
+            PatientSession.id != session.id,
+            PatientSession.queue_status == "called"
+        ).update({"queue_status": "waiting"})
+    if session.assigned_doctor_room:
+        db.query(PatientSession).filter(
+            PatientSession.assigned_doctor_room == session.assigned_doctor_room,
+            PatientSession.id != session.id,
+            PatientSession.queue_status == "called"
+        ).update({"queue_status": "waiting"})
+
+    # 2. Mark this session as called with fresh timestamp
     session.queue_status = "called"
+    session.queue_assigned_at = datetime.datetime.utcnow()
     db.commit()
     db.refresh(session)
 
@@ -649,7 +728,18 @@ def call_patient(payload: CallPatientRequest, db: Session = Depends(get_db)):
         },
         "summary": session.summary,
         "structured_summary": session.structured_summary,
-        "ocr_text": session.ocr_text
+        "ocr_text": session.ocr_text,
+        "previous_records_count": db.query(PatientSession).filter(
+            PatientSession.abha_id == patient_rec.id,
+            PatientSession.id != session.id,
+            or_(
+                PatientSession.doctor_prescription.isnot(None),
+                PatientSession.doctor_notes.isnot(None),
+                PatientSession.ocr_text.isnot(None),
+                PatientSession.status == "completed",
+                PatientSession.queue_status == "completed"
+            )
+        ).count() if patient_rec else 0
     }
 
 
@@ -714,3 +804,232 @@ def save_consultation_prescription(
         "session_status": session.status,
         "structured_summary": session.structured_summary
     }
+
+
+def parse_rx_text(rx_text: str, doc_name: str, date_str: str, room_str: str) -> List[Dict[str, Any]]:
+    meds = []
+    if not rx_text:
+        return meds
+    lines = rx_text.strip().split("\n")
+    for idx, line in enumerate(lines):
+        line = line.strip().lstrip("-*• ").strip()
+        if not line:
+            continue
+        name = line
+        dosage = "1 Tab"
+        frequency = "1-0-1"
+        duration = "3 days"
+        instructions = "After meals"
+
+        match = re.search(r"^(.*?)(?:\s*\((.*?)\))?(?:\s*\|\s*(.*?)\s*x\s*([^\[]+))?(?:\s*\[(.*?)\])?$", line)
+        if match:
+            raw_name, raw_dose, raw_freq, raw_dur, raw_inst = match.groups()
+            if raw_name:
+                name = raw_name.strip()
+            if raw_dose:
+                dosage = raw_dose.strip()
+            if raw_freq:
+                frequency = raw_freq.strip()
+            if raw_dur:
+                duration = raw_dur.strip()
+            if raw_inst:
+                instructions = raw_inst.strip()
+
+        meds.append({
+            "id": f"rx_{idx}_{name[:12].replace(' ', '_')}",
+            "name": name,
+            "dosage": dosage,
+            "frequency": frequency,
+            "duration": duration,
+            "instructions": instructions,
+            "prescribed_by": doc_name,
+            "doctor_room": room_str,
+            "date": date_str,
+            "source": "Doctor Consultation Rx"
+        })
+    return meds
+
+
+def extract_vitals_from_text(text: str) -> Dict[str, str]:
+    vitals = {}
+    if not text:
+        return vitals
+    bp_match = re.search(r"(?:BP|Blood Pressure)\s*[:=-]?\s*([0-9]{2,3}\s*/\s*[0-9]{2,3}(?:\s*mmHg)?)", text, re.IGNORECASE)
+    if bp_match:
+        vitals["bp"] = bp_match.group(1).strip()
+    pulse_match = re.search(r"(?:Pulse|Pulse Rate|Heart Rate)\s*[:=-]?\s*([0-9]{2,3}(?:\s*bpm)?)", text, re.IGNORECASE)
+    if pulse_match:
+        vitals["pulse"] = pulse_match.group(1).strip()
+    rbs_match = re.search(r"(?:RBS|Blood Sugar|Random Blood Sugar|Glucose)\s*[:=-]?\s*([0-9]{2,3}(?:\s*mg/d[lL])?)", text, re.IGNORECASE)
+    if rbs_match:
+        vitals["rbs"] = rbs_match.group(1).strip()
+    spo2_match = re.search(r"(?:SpO2|Oxygen)\s*[:=-]?\s*([0-9]{2,3}\s*%)", text, re.IGNORECASE)
+    if spo2_match:
+        vitals["spo2"] = spo2_match.group(1).strip()
+    return vitals
+
+
+@router.get("/doctor/sessions/{session_id}/history")
+def get_patient_medical_history(session_id: str, db: Session = Depends(get_db)):
+    """
+    Retrieves full historical medical records, previous doctor consultations,
+    prescribed medications, diagnostic reports, and scanned OCR documents
+    for the patient linked to the given session_id.
+    """
+    session = db.query(PatientSession).filter(PatientSession.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    patient_rec = session.patient
+    if not patient_rec and session.abha_id:
+        patient_rec = db.query(AbhaUser).filter(AbhaUser.id == session.abha_id).first()
+
+    if not patient_rec:
+        return {
+            "status": "success",
+            "session_id": session_id,
+            "patient": None,
+            "total_records": 0,
+            "consultations": [],
+            "prescriptions": [],
+            "reports": [],
+            "ocr_scans": []
+        }
+
+    # Query all historical sessions for this ABHA user
+    all_sessions = db.query(PatientSession).filter(
+        PatientSession.abha_id == patient_rec.id
+    ).order_by(PatientSession.created_at.desc()).all()
+
+    consultations = []
+    prescriptions = []
+    reports = []
+    ocr_scans = []
+
+    for s in all_sessions:
+        date_str = s.created_at.strftime("%d %b %Y") if s.created_at else "Previous Visit"
+        time_str = s.created_at.strftime("%I:%M %p") if s.created_at else ""
+        raw_doc_name = s.assigned_doctor_name or "Consulting Physician"
+        clean_name = re.sub(r'^(?:dr\.?\s*)+', '', raw_doc_name, flags=re.IGNORECASE).strip()
+        doc_name = f"Dr. {clean_name}" if clean_name else "Consulting Physician"
+        room_str = s.assigned_doctor_room or "OPD"
+        specialty = s.assigned_doctor_specialty or "General OPD"
+
+        # Check if consultation happened
+        has_consultation = bool(
+            s.doctor_prescription or 
+            s.doctor_notes or 
+            (s.structured_summary and isinstance(s.structured_summary, dict) and s.structured_summary.get("confirmed_diagnosis")) or
+            (s.status == "completed" and s.id != session_id)
+        )
+
+        diag = "Clinical OPD Consultation"
+        if s.structured_summary and isinstance(s.structured_summary, dict):
+            diag = s.structured_summary.get("confirmed_diagnosis") or s.structured_summary.get("provisional_diagnosis") or diag
+
+        if has_consultation:
+            consultations.append({
+                "session_id": s.id,
+                "date": date_str,
+                "time": time_str,
+                "doctor_name": doc_name,
+                "doctor_specialty": specialty,
+                "doctor_room": room_str,
+                "diagnosis": diag,
+                "notes": s.doctor_notes or "",
+                "prescription_raw": s.doctor_prescription or "",
+                "token": s.queue_token or "OPD",
+                "status": s.queue_status or s.status
+            })
+
+        # Prescriptions
+        session_meds = []
+        if s.structured_summary and isinstance(s.structured_summary, dict) and s.structured_summary.get("prescribed_medications"):
+            for idx, m in enumerate(s.structured_summary.get("prescribed_medications")):
+                if isinstance(m, dict) and m.get("name"):
+                    session_meds.append({
+                        "id": f"med_{s.id}_{idx}",
+                        "name": m.get("name"),
+                        "dosage": m.get("dosage", "1 Tab"),
+                        "frequency": m.get("frequency", "1-0-1"),
+                        "duration": m.get("duration", "3 days"),
+                        "instructions": m.get("instructions", "After meals"),
+                        "prescribed_by": doc_name,
+                        "doctor_room": room_str,
+                        "date": date_str,
+                        "source": "Doctor Prescription"
+                    })
+        elif s.doctor_prescription:
+            parsed = parse_rx_text(s.doctor_prescription, doc_name, date_str, room_str)
+            session_meds.extend(parsed)
+
+        prescriptions.extend(session_meds)
+
+        # OCR & Diagnostic Reports
+        if s.ocr_text and s.ocr_text.strip():
+            vitals = extract_vitals_from_text(s.ocr_text)
+            ocr_scans.append({
+                "session_id": s.id,
+                "date": date_str,
+                "preview": s.ocr_text[:200].replace("\n", " ").strip() + "...",
+                "full_text": s.ocr_text,
+                "vitals": vitals
+            })
+            if vitals:
+                summary_parts = []
+                if "bp" in vitals: summary_parts.append(f"BP: {vitals['bp']}")
+                if "pulse" in vitals: summary_parts.append(f"Pulse: {vitals['pulse']}")
+                if "rbs" in vitals: summary_parts.append(f"Blood Sugar: {vitals['rbs']}")
+                if "spo2" in vitals: summary_parts.append(f"SpO2: {vitals['spo2']}")
+                
+                reports.append({
+                    "id": f"report_vitals_{s.id}",
+                    "title": "Point-of-Care Vitals & Lab Screening",
+                    "date": date_str,
+                    "facility": "OPD Health Kiosk / Scanned Record",
+                    "vitals": vitals,
+                    "status": "Recorded",
+                    "notes": " | ".join(summary_parts) if summary_parts else "Vitals measured on record."
+                })
+
+        # Check triage alert as a diagnostic report
+        if s.triage_alert and isinstance(s.triage_alert, dict) and s.triage_alert.get("triggered"):
+            reports.append({
+                "id": f"report_triage_{s.id}",
+                "title": f"Triage Alert: {s.triage_alert.get('category', 'Critical Assessment').upper()}",
+                "date": date_str,
+                "facility": "Aarogya Kiosk AI Triage",
+                "vitals": {},
+                "status": s.triage_alert.get("severity", "High"),
+                "notes": s.triage_alert.get("reason", "Clinical triage classification triggered during intake screening.")
+            })
+
+    age_info = calculate_age_and_group(patient_rec.date_of_birth if patient_rec else None)
+
+    return {
+        "status": "success",
+        "session_id": session_id,
+        "patient": {
+            "id": patient_rec.id,
+            "full_name": patient_rec.full_name,
+            "abha_number": patient_rec.abha_number,
+            "abha_address": patient_rec.abha_address,
+            "gender": patient_rec.gender,
+            "date_of_birth": patient_rec.date_of_birth,
+            "mobile_number": patient_rec.mobile_number,
+            "blood_group": getattr(patient_rec, "blood_group", "B+"),
+            "allergies": getattr(patient_rec, "allergies", "No Known Allergies"),
+            "age": age_info["age"],
+            "age_group": age_info["age_group"]
+        },
+        "total_records": len(consultations) + len(prescriptions) + len(reports) + len(ocr_scans),
+        "consultations_count": len(consultations),
+        "prescriptions_count": len(prescriptions),
+        "reports_count": len(reports),
+        "ocr_scans_count": len(ocr_scans),
+        "consultations": consultations,
+        "prescriptions": prescriptions,
+        "reports": reports,
+        "ocr_scans": ocr_scans
+    }
+

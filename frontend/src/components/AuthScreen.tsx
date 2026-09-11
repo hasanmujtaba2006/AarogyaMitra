@@ -21,11 +21,14 @@ import {
   Calendar, 
   Lock,
   Check,
-  Flame
+  Flame,
+  Eye,
+  EyeOff
 } from 'lucide-react'
 import { PatientInfo } from '@/components/AbhaCard'
 
 import { LanguageCode } from '@/context/LanguageContext'
+import { extractErrorMessage } from '@/lib/errorUtils'
 
 interface AuthScreenProps {
   onLoginSuccess: (patient: PatientInfo) => void;
@@ -47,7 +50,13 @@ export default function AuthScreen({
 
   // --- LOGIN STATE ---
   const [loginMobile, setLoginMobile] = useState('')
-  const [loginStep, setLoginStep] = useState<'phone' | 'otp'>('phone')
+  const [loginStep, setLoginStep] = useState<'phone' | 'pin' | 'otp'>('phone')
+  const [loginPin, setLoginPin] = useState('')
+  const [returningPatientName, setReturningPatientName] = useState('')
+  const [isCheckingPhone, setIsCheckingPhone] = useState(false)
+  const [isVerifyingPin, setIsVerifyingPin] = useState(false)
+  const [unregisteredPhone, setUnregisteredPhone] = useState(false)
+  const [showLoginPin, setShowLoginPin] = useState(false)
   const [loginOtp, setLoginOtp] = useState('')
   const [loginTxnId, setLoginTxnId] = useState('')
   const [demoOtpHint, setDemoOtpHint] = useState('123456')
@@ -62,6 +71,8 @@ export default function AuthScreen({
   const [gender, setGender] = useState<'M' | 'F' | 'O'>('M')
   const [age, setAge] = useState<string>('')
   const [pinCode, setPinCode] = useState('')
+  const [regPin, setRegPin] = useState('')
+  const [showRegPin, setShowRegPin] = useState(false)
   const [district, setDistrict] = useState('')
   const [stateName, setStateName] = useState('')
   const [pinLoading, setPinLoading] = useState(false)
@@ -225,14 +236,121 @@ export default function AuthScreen({
 
     const data = await res.json()
     if (!res.ok) {
-      throw new Error(data.detail || data.message || `Request failed with status ${res.status}`)
+      const formatted = extractErrorMessage(data, `Request failed with status ${res.status}`)
+      const errorObj = new Error(formatted)
+      ;(errorObj as any).status = res.status
+      ;(errorObj as any).data = data
+      throw errorObj
     }
     return data
   }
 
   // =========================================================================
-  // 1. LOGIN FLOW HANDLERS (Real Firebase Phone Auth + Fallback)
+  // 1. LOGIN FLOW HANDLERS (Direct 6-Digit PIN + Fast Kiosk Verification)
   // =========================================================================
+
+  // Check if returning phone is registered and proceed to PIN Login
+  const handleCheckPhoneAndProceed = async () => {
+    setErrorMessage('')
+    setSuccessMessage('')
+    setUnregisteredPhone(false)
+    const cleanNumber = loginMobile.replace(/\D/g, '')
+
+    if (cleanNumber.length !== 10) {
+      setErrorMessage(t('Please enter a valid 10-digit mobile number.', 'कृपया 10 अंकों का वैध मोबाइल नंबर दर्ज करें।', '10 இலக்க மொபைல் எண்ணை உள்ளிடவும்.', '10 అంకెల మొబైల్ నంబర్‌ను నమోదు చేయండి.'))
+      return
+    }
+
+    setIsCheckingPhone(true)
+    try {
+      const data = await safeFetchJson('/api/auth/check-phone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mobile_number: cleanNumber })
+      })
+
+      if (data.registered) {
+        setReturningPatientName(data.full_name || '')
+        setLoginStep('pin')
+        setLoginPin('')
+        setErrorMessage('')
+      } else {
+        setUnregisteredPhone(true)
+        setErrorMessage(
+          t(
+            `Mobile number +91 ${cleanNumber} is not registered yet. Please tap "Register as New Patient" below.`,
+            `मोबाइल नंबर +91 ${cleanNumber} पंजीकृत नहीं है। कृपया नीचे "नया रोगी पंजीकरण" पर टैप करें।`,
+            `மொபைல் எண் +91 ${cleanNumber} இன்னும் பதிவு செய்யப்படவில்லை. கீழே பதிவு செய்யவும்.`,
+            `మొబైల్ నంబర్ +91 ${cleanNumber} ఇంకా నమోదు కాలేదు. దయచేసి క్రింద నమోదు చేయండి.`
+          )
+        )
+      }
+    } catch (err: any) {
+      // Fallback: proceed directly to PIN step so local/offline kiosk is never blocked
+      setLoginStep('pin')
+    } finally {
+      setIsCheckingPhone(false)
+    }
+  }
+
+  // PIN Login verification (Direct, Fast & Reliable)
+  const handlePinLogin = async () => {
+    setErrorMessage('')
+    setSuccessMessage('')
+    const cleanNumber = loginMobile.replace(/\D/g, '')
+    const cleanPin = loginPin.replace(/\D/g, '')
+
+    if (cleanPin.length !== 6) {
+      setErrorMessage(t('Please enter your 6-digit Login PIN.', 'कृपया अपना 6 अंकों का लॉगिन पिन दर्ज करें।', 'உங்கள் 6 இலக்க உள்நுழைவு பின்னை உள்ளிடவும்.', 'దయచేసి మీ 6 అంకెల లాగిన్ పిన్ నమోదు చేయండి.'))
+      return
+    }
+
+    setIsVerifyingPin(true)
+    try {
+      const data = await safeFetchJson('/api/auth/login-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mobile_number: cleanNumber,
+          pin: cleanPin
+        })
+      })
+
+      if (data.access_token) {
+        localStorage.setItem('aarogya_token', data.access_token)
+      }
+
+      const p = data.patient
+      const patientData: PatientInfo = {
+        id: p.id || cleanNumber,
+        abha_number: p.uhid || p.abha_number || `AM-${cleanNumber}`,
+        abha_address: p.abha_address || `${cleanNumber}@aarogya`,
+        full_name: p.full_name || `Patient ${cleanNumber.slice(-4)}`,
+        gender: p.gender || 'M',
+        date_of_birth: p.date_of_birth || '1990-01-01',
+        age: p.age,
+        mobile_number: p.mobile_number || cleanNumber,
+        address: p.address,
+        district: p.district || district,
+        state: p.state || stateName,
+        pincode: p.pincode || pinCode,
+        blood_group: p.blood_group || 'B+',
+        allergies: p.allergies || 'No Known Allergies',
+        profile_photo: p.profile_photo || '',
+        auth_method: 'PIN_LOGIN',
+        verification_status: 'VERIFIED'
+      }
+
+      onLoginSuccess(patientData)
+    } catch (err: any) {
+      const fallback = t('Incorrect 6-digit PIN. Please check your PIN and re-enter.', 'गलत 6-अंकीय पिन। कृपया अपना पिन जांचें और पुनः दर्ज करें।', 'தவறான 6 இலக்க PIN. உங்கள் PIN-ஐ சரிபார்த்து மீண்டும் முயற்சிக்கவும்.', 'తప్పు 6-అంకెల PIN. దయచేసి మీ PINని తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.')
+      const friendly = extractErrorMessage(err, fallback)
+      setErrorMessage(friendly)
+    } finally {
+      setIsVerifyingPin(false)
+    }
+  }
+
   const handleSendOtp = async () => {
     setErrorMessage('')
     setSuccessMessage('')
@@ -282,7 +400,7 @@ export default function AuthScreen({
       }
     } catch (err: any) {
       console.error('Send OTP error:', err)
-      let msg = err.message || t('Error sending OTP. Please try again.', 'ओटीपी भेजने में त्रुटि हुई। पुनः प्रयास करें।')
+      let msg = extractErrorMessage(err, t('Error sending OTP. Please check your phone number and try again.', 'ओटीपी भेजने में त्रुटि हुई। कृपया पुनः प्रयास करें।'))
       if (err.code === 'auth/invalid-api-key' || err.code === 'auth/configuration-not-found') {
         msg = t(
           'Firebase keys not configured in frontend/.env.local. Please paste your Firebase web credentials in frontend/.env.local for live carrier SMS.',
@@ -341,7 +459,7 @@ export default function AuthScreen({
         data.message || t('Kiosk OTP generated successfully.', 'कियोस्क ओटीपी सफलतापूर्वक उत्पन्न हुआ।')
       )
     } catch (err: any) {
-      setErrorMessage(err.message || t('Error sending OTP. Please try again.', 'ओटीपी भेजने में त्रुटि हुई। पुनः प्रयास करें।'))
+      setErrorMessage(extractErrorMessage(err, t('Unable to send OTP at this moment. Please check your mobile number or try again.', 'ओटीपी भेजने में असमर्थ। कृपया पुनः प्रयास करें।')))
     } finally {
       setIsSendingOtp(false)
     }
@@ -431,7 +549,7 @@ export default function AuthScreen({
       }
     } catch (err: any) {
       console.error('Verify OTP error:', err)
-      let msg = err.message || t('Verification failed. Please check the OTP.', 'सत्यापन विफल। कृपया ओटीपी जांचें।')
+      let msg = extractErrorMessage(err, t('Verification failed. Please check the OTP code and try again.', 'सत्यापन विफल। कृपया ओटीपी जांचें।'))
       if (err.code === 'auth/invalid-verification-code') {
         msg = t('Incorrect SMS OTP. Please check your mobile phone SMS and re-enter.', 'गलत ओटीपी। कृपया अपने फोन पर आया सही कोड दर्ज करें।')
       } else if (err.code === 'auth/code-expired') {
@@ -453,6 +571,7 @@ export default function AuthScreen({
 
     const cleanNumber = regMobile.replace(/\D/g, '')
     const cleanPin = pinCode.replace(/\D/g, '')
+    const cleanLoginPin = regPin.replace(/\D/g, '')
     const parsedAge = parseInt(age, 10)
 
     if (!fullName.trim()) {
@@ -468,7 +587,11 @@ export default function AuthScreen({
       return
     }
     if (cleanPin.length !== 6) {
-      setErrorMessage(t('Please enter a 6-digit PIN code.', 'कृपया 6 अंकों का पिन कोड दर्ज करें।'))
+      setErrorMessage(t('Please enter a 6-digit postal PIN code.', 'कृपया 6 अंकों का पोस्टल पिन कोड दर्ज करें।'))
+      return
+    }
+    if (cleanLoginPin.length !== 6) {
+      setErrorMessage(t('Please create a 6-digit Login PIN.', 'कृपया 6 अंकों का लॉगिन पिन बनाएं।', 'தயவுசெய்து 6 இலக்க உள்நுழைவு பின்னை உருவாக்கவும்.', 'దయచేసి 6 అంకెల లాగిన్ పిన్‌ను సృష్టించండి.'))
       return
     }
 
@@ -484,7 +607,8 @@ export default function AuthScreen({
           age: parsedAge,
           pin_code: cleanPin,
           district: district || 'District HQ',
-          state: stateName || 'State'
+          state: stateName || 'State',
+          login_pin: cleanLoginPin
         })
       })
 
@@ -515,7 +639,7 @@ export default function AuthScreen({
 
       onLoginSuccess(patientData)
     } catch (err: any) {
-      setErrorMessage(err.message || t('Registration failed. Please check inputs.', 'पंजीकरण विफल रहा। कृपया विवरण जांचें।'))
+      setErrorMessage(extractErrorMessage(err, t('Registration failed. Please check your details and try again.', 'पंजीकरण विफल रहा। कृपया विवरण जांचें।')))
     } finally {
       setIsSubmittingReg(false)
     }
@@ -609,7 +733,7 @@ export default function AuthScreen({
       {/* =================================================================== */}
       {authMode === 'login' && (
         <div className="space-y-4 sm:space-y-6">
-          {loginStep === 'phone' ? (
+          {loginStep === 'phone' && (
             /* Step 1: Mobile Number Input */
             <div className="space-y-4 sm:space-y-6">
               <div>
@@ -625,39 +749,155 @@ export default function AuthScreen({
                     inputMode="numeric"
                     maxLength={10}
                     value={loginMobile}
-                    onChange={(e) => setLoginMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                    onChange={(e) => {
+                      setLoginMobile(e.target.value.replace(/\D/g, '').slice(0, 10))
+                      setUnregisteredPhone(false)
+                      setErrorMessage('')
+                    }}
                     placeholder="9876543210"
                     className="w-full pl-16 sm:pl-24 pr-4 sm:pr-6 py-3.5 sm:py-5 text-xl sm:text-3xl font-black tracking-wider text-slate-900 bg-white border-2 sm:border-4 border-slate-400 rounded-xl sm:rounded-2xl focus:border-blue-600 focus:ring-2 sm:focus:ring-4 focus:ring-blue-200 outline-none shadow-inner"
                   />
                 </div>
                 <p className="text-xs sm:text-base text-slate-500 font-bold mt-1.5 sm:mt-2">
-                  {t('We will send an OTP via SMS to verify your mobile number.', 'हम आपके नंबर पर एसएमएस द्वारा ओटीपी भेजेंगे।', 'உங்கள் எண்ணை சரிபார்க்க SMS மூலம் OTP அனுப்புவோம்.', 'మీ మొబైల్ నంబర్‌ను ధృవీకరించడానికి మేము SMS ద్వారా OTPని పంపుతాము.')}
+                  {t('Enter your mobile number to log in with your 6-digit PIN.', 'अपने 6 अंकों के पिन से लॉग इन करने के लिए मोबाइल नंबर दर्ज करें।', 'உங்கள் 6 இலக்க பின்னைப் பயன்படுத்தி உள்நுழைய மொபைல் எண்ணை உள்ளிடவும்.', 'మీ 6 అంకెల పిన్‌తో లాగిన్ చేయడానికి మొబైల్ నంబర్‌ను నమోదు చేయండి.')}
                 </p>
               </div>
 
-              {/* Action "Get OTP" Button */}
+              {/* Unregistered Phone Banner with 1-Click Registration */}
+              {unregisteredPhone && (
+                <div className="p-4 bg-amber-50 border-2 sm:border-3 border-amber-400 rounded-2xl space-y-3 text-left animate-shake shadow-md">
+                  <div className="flex items-center gap-2 text-amber-900 font-black text-sm sm:text-base">
+                    <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+                    <span>{t('New Patient Detected!', 'नया रोगी मिला!')}</span>
+                  </div>
+                  <p className="text-xs sm:text-sm font-bold text-amber-800">
+                    {t(
+                      `+91 ${loginMobile} is not registered yet. Tap below to register and create your 6-digit PIN in 30 seconds.`,
+                      `+91 ${loginMobile} पंजीकृत नहीं है। 30 सेकंड में पंजीकरण करने और 6 अंकों का पिन बनाने के लिए नीचे टैप करें।`
+                    )}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRegMobile(loginMobile.replace(/\D/g, ''))
+                      setAuthMode('register')
+                      setUnregisteredPhone(false)
+                      setErrorMessage('')
+                    }}
+                    className="w-full py-3 px-4 bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white font-black rounded-xl text-sm sm:text-base flex items-center justify-center gap-2 shadow-md transition-all"
+                  >
+                    <User className="w-5 h-5 shrink-0" />
+                    <span>{t('Register as New Patient (30 Seconds)', 'नया रोगी पंजीकरण करें (30 सेकंड)')}</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
+              {/* Action "Continue to PIN Login" Button */}
               <button
                 type="button"
-                onClick={handleSendOtp}
-                disabled={isSendingOtp || loginMobile.length !== 10}
+                onClick={handleCheckPhoneAndProceed}
+                disabled={isCheckingPhone || loginMobile.length !== 10}
                 className="w-full py-3.5 sm:py-5 px-4 sm:px-8 text-base sm:text-2xl rounded-xl sm:rounded-2xl font-black text-white bg-blue-600 hover:bg-blue-700 active:scale-95 disabled:bg-slate-300 disabled:cursor-not-allowed transition-all shadow-xl flex items-center justify-center gap-2.5 sm:gap-4"
               >
-                {isSendingOtp ? (
+                {isCheckingPhone ? (
                   <>
                     <RefreshCw className="w-5 h-5 sm:w-7 sm:h-7 animate-spin" />
-                    <span>{t('Sending OTP via SMS...', 'ओटीपी भेजा जा रहा है...', 'SMS மூலம் OTP அனுப்பப்படுகிறது...', 'SMS ద్వారా OTP పంపబడుతోంది...')}</span>
+                    <span>{t('Checking Patient Record...', 'रोगी रिकॉर्ड जांचा जा रहा है...', 'சரிபார்க்கப்படுகிறது...', 'పరిశీలిస్తోంది...')}</span>
                   </>
                 ) : (
                   <>
-                    <span>{t('Get OTP', 'ओटीपी प्राप्त करें', 'OTP பெறுக', 'OTP పొందండి')}</span>
+                    <Lock className="w-5 h-5 sm:w-7 sm:h-7" />
+                    <span>{t('Continue to PIN Login', 'पिन लॉगिन जारी रखें', 'PIN உள்நுழைவுக்கு தொடரவும்', 'PIN లాగిన్ కొనసాగించండి')}</span>
                     <ArrowRight className="w-5 h-5 sm:w-7 sm:h-7" />
                   </>
                 )}
               </button>
-
             </div>
-          ) : (
-            /* Step 2: 6-Digit OTP Verification */
+          )}
+
+          {loginStep === 'pin' && (
+            /* Step 2: 6-Digit PIN Verification */
+            <div className="space-y-4 sm:space-y-6">
+              <div className="flex items-center justify-between bg-blue-50 border-2 border-blue-300 rounded-xl sm:rounded-2xl p-3 sm:p-4">
+                <div className="flex items-center gap-2 sm:gap-3 text-left">
+                  <Phone className="w-5 h-5 sm:w-6 sm:h-6 text-blue-700 shrink-0" />
+                  <div>
+                    {returningPatientName && (
+                      <span className="block text-xs sm:text-sm font-black text-blue-900">
+                        {returningPatientName}
+                      </span>
+                    )}
+                    <span className="text-base sm:text-xl font-extrabold text-blue-950 font-mono">
+                      +91 {loginMobile || 'Patient'}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoginStep('phone')
+                    setLoginPin('')
+                    setErrorMessage('')
+                  }}
+                  className="text-xs sm:text-base font-black text-blue-700 underline hover:text-blue-900 flex items-center gap-1"
+                >
+                  <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span>{t('Change Number', 'नंबर बदलें', 'எண்ணை மாற்றவும்', 'నంబరు మార్చండి')}</span>
+                </button>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5 sm:mb-3">
+                  <label className="text-base sm:text-xl md:text-2xl font-extrabold text-slate-800 flex items-center gap-2">
+                    <Lock className="w-5 h-5 sm:w-6 sm:h-6 text-blue-700 shrink-0" />
+                    <span>{t('Enter 6-Digit Login PIN', '6 अंकों का लॉगिन पिन दर्ज करें', '6 இலக்க உள்நுழைவு பின்னை உள்ளிடவும்', '6 అంకెల లాగిన్ పిన్ నమోదు చేయండి')}</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowLoginPin(!showLoginPin)}
+                    className="text-xs sm:text-sm font-extrabold text-blue-700 underline hover:text-blue-900 flex items-center gap-1"
+                  >
+                    {showLoginPin ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    <span>{showLoginPin ? t('Hide PIN', 'पिन छिपाएं') : t('Show PIN', 'पिन दिखाएं')}</span>
+                  </button>
+                </div>
+
+                <input
+                  type={showLoginPin ? "text" : "password"}
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={loginPin}
+                  onChange={(e) => setLoginPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="------"
+                  className="w-full py-3.5 sm:py-5 px-3 sm:px-6 text-2xl sm:text-4xl font-black text-center tracking-[0.3em] sm:tracking-[0.5em] text-blue-950 bg-white border-2 sm:border-4 border-blue-600 rounded-xl sm:rounded-2xl focus:ring-2 sm:focus:ring-4 focus:ring-blue-200 outline-none shadow-inner"
+                />
+              </div>
+
+              {/* Action "Verify PIN & Start Consultation" Button */}
+              <button
+                type="button"
+                onClick={handlePinLogin}
+                disabled={isVerifyingPin || loginPin.length !== 6}
+                className="w-full py-3.5 sm:py-5 px-4 sm:px-8 text-base sm:text-2xl rounded-xl sm:rounded-2xl font-black text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:bg-slate-300 disabled:cursor-not-allowed transition-all shadow-xl flex items-center justify-center gap-2.5 sm:gap-4"
+              >
+                {isVerifyingPin ? (
+                  <>
+                    <RefreshCw className="w-5 h-5 sm:w-7 sm:h-7 animate-spin" />
+                    <span>{t('Verifying PIN...', 'पिन सत्यापित हो रहा है...', 'PIN சரிபார்க்கப்படுகிறது...', 'PIN ధృవీకరించబడుతోంది...')}</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-5 h-5 sm:w-7 sm:h-7" />
+                    <span>{t('Verify PIN & Start Consultation', 'पिन सत्यापित करें और परामर्श शुरू करें', 'சரிபார்த்து ஆலோசனையைத் தொடங்கவும்', 'ధృవీకరించి సంప్రదింపులను ప్రారంభించండి')}</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
+          {loginStep === 'otp' && (
+            /* Step 2 (Alternative): 6-Digit OTP Verification */
             <div className="space-y-4 sm:space-y-6">
               <div className="flex items-center justify-between bg-blue-50 border-2 border-blue-300 rounded-xl sm:rounded-2xl p-3 sm:p-4">
                 <div className="flex items-center gap-2 sm:gap-3">
@@ -695,10 +935,18 @@ export default function AuthScreen({
                 />
 
                 {/* Resend OTP countdown */}
-                <div className="mt-2.5 sm:mt-4 flex items-center justify-end">
+                <div className="mt-2.5 sm:mt-4 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => setLoginStep('pin')}
+                    className="text-xs sm:text-base font-bold text-blue-700 underline"
+                  >
+                    {t('Switch to PIN Login', 'पिन लॉगिन पर स्विच करें')}
+                  </button>
+
                   {resendTimer > 0 ? (
                     <span className="text-xs sm:text-base font-bold text-slate-500">
-                      {t(`Resend in ${resendTimer}s`, `${resendTimer}s में पुनः भेजें`, `${resendTimer} வினாடிகளில் மீண்டும் அனுப்பவும்`, `${resendTimer} సెకన్లలో మళ్లీ పంపండి`)}
+                      {t(`Resend in ${resendTimer}s`, `${resendTimer}s में पुनः भेजें`)}
                     </span>
                   ) : (
                     <button
@@ -707,7 +955,7 @@ export default function AuthScreen({
                       className="text-xs sm:text-base font-black text-blue-700 underline hover:text-blue-900 flex items-center gap-1.5"
                     >
                       <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5" />
-                      <span>{t('Resend OTP', 'ओटीपी पुनः भेजें', 'OTP மீண்டும் அனுப்பவும்', 'OTP మళ్లీ పంపండి')}</span>
+                      <span>{t('Resend OTP', 'ओटीपी पुनः भेजें')}</span>
                     </button>
                   )}
                 </div>
@@ -913,7 +1161,44 @@ export default function AuthScreen({
             </div>
           </div>
 
-          {/* 6. Submit Button */}
+          {/* 6. Create 6-Digit Login PIN */}
+          <div className="bg-emerald-50 border-2 sm:border-4 border-emerald-300 rounded-2xl sm:rounded-3xl p-3.5 sm:p-6 space-y-2 sm:space-y-3 shadow-sm">
+            <div className="flex items-center justify-between">
+              <label className="text-sm sm:text-lg md:text-xl font-extrabold text-emerald-950 flex items-center gap-1.5 sm:gap-2">
+                <Lock className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-700 shrink-0" />
+                <span>{t('6. Create 6-Digit Login PIN', '6. 6 अंकों का लॉगिन पिन बनाएं', '6. 6 இலக்க உள்நுழைவு பின்னை உருவாக்கவும்', '6. 6 అంకెల లాగిన్ పిన్ సృష్టించండి')} <span className="text-red-500">*</span></span>
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowRegPin(!showRegPin)}
+                className="text-xs sm:text-sm font-extrabold text-emerald-800 underline hover:text-emerald-950 flex items-center gap-1"
+              >
+                {showRegPin ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                <span>{showRegPin ? t('Hide PIN', 'पिन छिपाएं') : t('Show PIN', 'पिन दिखाएं')}</span>
+              </button>
+            </div>
+
+            <input
+              type={showRegPin ? "text" : "password"}
+              inputMode="numeric"
+              maxLength={6}
+              required
+              value={regPin}
+              onChange={(e) => setRegPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              placeholder="------"
+              className="w-full p-3 sm:p-4 text-2xl sm:text-3xl font-black text-center tracking-[0.3em] sm:tracking-[0.5em] text-emerald-950 bg-white border-2 sm:border-4 border-emerald-500 rounded-xl sm:rounded-2xl focus:border-emerald-700 focus:ring-2 sm:focus:ring-4 focus:ring-emerald-200 outline-none shadow-inner"
+            />
+            <p className="text-xs sm:text-sm font-bold text-emerald-800">
+              {t(
+                'Remember this 6-digit PIN! You will use it to log in at any AarogyaMitra kiosk.',
+                'यह 6 अंकों का पिन याद रखें! अगली बार लॉग इन करने के लिए आप इस पिन का उपयोग करेंगे।',
+                'இந்த 6 இலக்க பின்னை நினைவில் கொள்ளுங்கள்! அடுத்த முறை உள்நுழைய இதைப் பயன்படுத்துவீர்கள்.',
+                'ఈ 6 అంకెల పిన్‌ను గుర్తుంచుకోండి! తదుపరిసారి లాగిన్ చేయడానికి దీన్ని ఉపయోగిస్తారు.'
+              )}
+            </p>
+          </div>
+
+          {/* 7. Submit Button */}
           <button
             type="submit"
             disabled={isSubmittingReg}

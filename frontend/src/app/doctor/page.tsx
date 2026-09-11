@@ -15,7 +15,9 @@ import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import AbhaCard, { PatientInfo } from '@/components/AbhaCard'
 import StructuredClinicalSummaryCard from '@/components/StructuredClinicalSummaryCard'
+import DoctorPreviousRecordsCard from '@/components/DoctorPreviousRecordsCard'
 import { useLanguage } from '@/context/LanguageContext'
+import { extractErrorMessage } from '@/lib/errorUtils'
 
 export interface PrescribedMed {
   id?: string;
@@ -31,6 +33,7 @@ interface DoctorSessionPatient {
   queue_token: string;
   queue_status: string;
   queue_assigned_at: string;
+  previous_records_count?: number;
   patient: {
     id: number;
     full_name: string;
@@ -110,6 +113,36 @@ export default function DoctorDashboard() {
   const [showPrintModal, setShowPrintModal] = useState(false)
   const [showTranscript, setShowTranscript] = useState(false)
 
+  // Handle professional print prescription isolation
+  const handlePrintPrescription = () => {
+    document.body.classList.add('printing-prescription')
+    setTimeout(() => {
+      window.print()
+    }, 50)
+  }
+
+  // Manage print class lifecycle when modal opens/closes
+  useEffect(() => {
+    if (showPrintModal) {
+      document.body.classList.add('printing-prescription')
+    } else {
+      document.body.classList.remove('printing-prescription')
+    }
+    return () => {
+      document.body.classList.remove('printing-prescription')
+    }
+  }, [showPrintModal])
+
+  useEffect(() => {
+    const handleAfterPrint = () => {
+      if (!showPrintModal) {
+        document.body.classList.remove('printing-prescription')
+      }
+    }
+    window.addEventListener('afterprint', handleAfterPrint)
+    return () => window.removeEventListener('afterprint', handleAfterPrint)
+  }, [showPrintModal])
+
   // Active consultation session and doctor state references to avoid stale closures in intervals & async fetches
   const activeSessionIdRef = useRef<string | null>(null)
   const currentDoctorRef = useRef<any>(null)
@@ -177,7 +210,7 @@ export default function DoctorDashboard() {
         }
       }
     } catch (err: any) {
-      setError(err.message || 'Error fetching doctor queue')
+      setError(extractErrorMessage(err, 'Error fetching doctor queue. Retrying...'))
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -255,7 +288,7 @@ export default function DoctorDashboard() {
       })
 
       const data = await res.json()
-      if (!res.ok) throw new Error(data.detail || 'Failed to update availability status')
+      if (!res.ok) throw new Error(extractErrorMessage(data, 'Failed to update availability status'))
 
       setDoctorStatus(newStatus)
       doctorStatusRef.current = newStatus
@@ -277,7 +310,7 @@ export default function DoctorDashboard() {
 
       fetchQueue(true)
     } catch (err: any) {
-      setError(err.message || 'Status update failed')
+      setError(extractErrorMessage(err, 'Status update failed. Please try again.'))
     } finally {
       setStatusUpdating(false)
     }
@@ -297,7 +330,7 @@ export default function DoctorDashboard() {
       })
 
       const data = await res.json()
-      if (!res.ok) throw new Error(data.detail || 'Failed to call patient')
+      if (!res.ok) throw new Error(extractErrorMessage(data, 'Failed to call patient'))
 
       setMessage(`🔔 Token ${sessionPatient.queue_token} (${sessionPatient.patient.full_name}) called into Cabin ${currentDoctor?.room_number}! Audio chime triggered on Patient Kiosk.`)
       
@@ -309,7 +342,7 @@ export default function DoctorDashboard() {
       setActiveTab('current')
       fetchQueue(true)
     } catch (err: any) {
-      setError(err.message || 'Failed to call patient')
+      setError(extractErrorMessage(err, 'Failed to call patient. Please try again.'))
     } finally {
       setCallingPatient(false)
     }
@@ -328,6 +361,21 @@ export default function DoctorDashboard() {
       ...prev,
       { id: `med_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, name, dosage, frequency: freq, duration: dur, instructions: inst }
     ])
+  }
+
+  const handleAddMedicationFromHistory = (med: { name: string; dosage: string; frequency: string; duration: string; instructions: string }) => {
+    setMedications(prev => [
+      ...prev,
+      {
+        id: `med_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        name: med.name,
+        dosage: med.dosage || '1 Tab',
+        frequency: med.frequency || '1-0-1',
+        duration: med.duration || '3 days',
+        instructions: med.instructions || 'After meals'
+      }
+    ])
+    setMessage(`📋 Added "${med.name}" to active prescription form.`)
   }
 
   const handleRemoveMedication = (index: number) => {
@@ -369,7 +417,7 @@ export default function DoctorDashboard() {
       })
 
       const data = await res.json()
-      if (!res.ok) throw new Error(data.detail || 'Failed to save clinical prescription')
+      if (!res.ok) throw new Error(extractErrorMessage(data, 'Failed to save clinical prescription'))
 
       setMessage(`✅ Prescription and clinical records for ${currentPatient.patient.full_name} saved successfully! Consultation marked completed.`)
       
@@ -408,7 +456,7 @@ export default function DoctorDashboard() {
       setActiveTab('queue')
       fetchQueue(true)
     } catch (err: any) {
-      setError(err.message || 'Error submitting prescription')
+      setError(extractErrorMessage(err, 'Error submitting prescription. Please check details and try again.'))
     } finally {
       setSaving(false)
     }
@@ -1027,6 +1075,14 @@ export default function DoctorDashboard() {
 
                     </div>
 
+                    {/* PREVIOUS MEDICAL RECORDS, REPORTS & PRESCRIPTIONS CARD */}
+                    <DoctorPreviousRecordsCard
+                      sessionId={currentPatient.session_id}
+                      patientAbha={currentPatient.patient?.abha_address}
+                      patientName={currentPatient.patient?.full_name}
+                      onAddMedication={handleAddMedicationFromHistory}
+                    />
+
                   </div>
 
                   {/* RIGHT COLUMN: Doctor's Prescription & Clinical Form (Requirement 10) */}
@@ -1276,39 +1332,40 @@ export default function DoctorDashboard() {
           PRINT PRESCRIPTION MODAL (Requirement 10 - ABDM Standard)
          ========================================================= */}
       {showPrintModal && currentPatient && (
-        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto no-print">
-          <div className="bg-slate-100 rounded-2xl shadow-2xl border border-slate-300 w-full max-w-4xl overflow-hidden max-h-[95vh] flex flex-col my-auto">
+        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto rx-modal-backdrop">
+          <div className="bg-slate-100 rounded-2xl shadow-2xl border border-slate-300 w-full max-w-4xl overflow-hidden max-h-[95vh] flex flex-col my-auto rx-modal-container">
             
-            {/* Modal Top Action Toolbar (Hidden during actual print) */}
-            <div className="px-5 py-3 bg-slate-900 text-white border-b border-slate-800 flex items-center justify-between shrink-0 no-print">
-              <div className="flex items-center gap-2.5">
+            {/* Modal Top Action Toolbar (Hidden during print) */}
+            <div className="px-3 sm:px-5 py-2.5 sm:py-3 bg-slate-900 text-white border-b border-slate-800 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 shrink-0 print:hidden">
+              <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
                 <div className="p-1.5 bg-blue-600/30 text-blue-400 rounded-lg border border-blue-500/30">
                   <Printer className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-sm text-slate-100 flex items-center gap-2">
+                  <h3 className="font-bold text-sm text-slate-100 flex items-center gap-2 flex-wrap">
                     <span>OPD Electronic Prescription (e-Rx) Slip</span>
                     <span className="text-[10px] font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full">
                       ABDM FHIR R4 Standard
                     </span>
                   </h3>
                   <p className="text-[11px] text-slate-400">
-                    National Health Authority • Ayushman Bharat Digital Mission (Form 3-A)
+                    Patient: <strong className="text-slate-200">{currentPatient.patient.full_name}</strong> • Token: <strong className="text-blue-300 font-mono">{currentPatient.queue_token}</strong>
                   </p>
                 </div>
               </div>
               
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => window.print()}
-                  className="px-4 py-2 bg-[#002F6C] hover:bg-blue-900 text-white rounded-xl text-xs font-bold shadow flex items-center gap-1.5 transition"
+                  onClick={handlePrintPrescription}
+                  className="px-4 py-2 bg-[#002F6C] hover:bg-blue-800 text-white rounded-xl text-xs font-bold shadow flex items-center gap-1.5 transition active:scale-95"
                 >
                   <Printer className="w-4 h-4" />
-                  <span>Print Document</span>
+                  <span>Print / Save PDF</span>
                 </button>
                 <button
                   onClick={() => setShowPrintModal(false)}
                   className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition"
+                  title="Close Preview"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -1316,49 +1373,21 @@ export default function DoctorDashboard() {
             </div>
 
             {/* Scrollable Document Canvas */}
-            <div className="p-3 sm:p-6 overflow-y-auto flex-1 bg-slate-200/60 flex justify-center">
+            <div className="p-3 sm:p-6 overflow-y-auto flex-1 bg-slate-200/70 flex justify-center rx-modal-canvas">
               
               {/* Actual Printable Prescription Sheet (A4 Proportion) */}
               <div
                 id="printable-prescription"
-                className="w-full max-w-3xl bg-white shadow-xl rounded-xl border border-slate-300 p-6 sm:p-8 font-sans text-slate-900 print:shadow-none print:border-0 print:p-0 print:m-0 print:w-full"
+                className="w-full max-w-3xl bg-white shadow-2xl rounded-xl border border-slate-300 p-6 sm:p-8 font-sans text-slate-900 print:shadow-none print:border-0 print:p-0 print:m-0 print:w-full"
               >
                 
-                {/* Print CSS Styles */}
-                <style dangerouslySetInnerHTML={{ __html: `
-                  @media print {
-                    body * {
-                      visibility: hidden !important;
-                    }
-                    #printable-prescription, #printable-prescription * {
-                      visibility: visible !important;
-                    }
-                    #printable-prescription {
-                      position: absolute !important;
-                      left: 0 !important;
-                      top: 0 !important;
-                      width: 100% !important;
-                      max-width: 100% !important;
-                      margin: 0 !important;
-                      padding: 10mm 12mm !important;
-                      border: none !important;
-                      box-shadow: none !important;
-                      background: white !important;
-                      color: black !important;
-                    }
-                    .no-print {
-                      display: none !important;
-                    }
-                  }
-                `}} />
-
                 {/* 1. OFFICIAL INSTITUTIONAL HEADER */}
                 <div className="border-b-2 border-[#002F6C] pb-3">
                   <div className="flex items-start justify-between gap-3">
                     
                     {/* Left: Hospital Emblem & Title */}
                     <div className="flex items-center gap-3">
-                      <div className="w-13 h-13 bg-[#002F6C] text-white rounded-2xl flex flex-col items-center justify-center shadow-md p-1.5 shrink-0">
+                      <div className="w-14 h-14 bg-[#002F6C] text-white rounded-2xl flex flex-col items-center justify-center shadow-md p-1.5 shrink-0">
                         <HeartPulse className="w-7 h-7 text-emerald-400" />
                         <span className="text-[7px] font-black tracking-widest text-blue-200 uppercase mt-0.5">AAROGYA</span>
                       </div>
@@ -1399,9 +1428,9 @@ export default function DoctorDashboard() {
                   </div>
 
                   {/* Header Sub-bar: Title of Prescription Form */}
-                  <div className="mt-2.5 pt-2 border-t border-slate-200 flex items-center justify-between text-[10px] sm:text-[11px] text-slate-600 font-semibold uppercase tracking-wider">
+                  <div className="mt-2.5 pt-2 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 text-[10px] sm:text-[11px] text-slate-600 font-semibold uppercase tracking-wider">
                     <span>Department of Outpatient Services (OPD)</span>
-                    <span className="px-2 py-0.5 bg-[#002F6C] text-white rounded text-[10px] font-bold">
+                    <span className="px-2.5 py-0.5 bg-[#002F6C] text-white rounded text-[10px] font-bold shadow-xs">
                       e-Prescription & Clinical Consultation Slip (Form 3-A)
                     </span>
                     <span>Ayushman Bharat Digital Health Record</span>
@@ -1416,14 +1445,14 @@ export default function DoctorDashboard() {
                     </div>
                     <div className="font-bold text-slate-900 text-sm mt-0.5 flex items-center gap-1.5">
                       <Stethoscope className="w-3.5 h-3.5 text-[#002F6C]" />
-                      <span>{currentDoctor?.full_name || 'Dr. Medical Officer'}</span>
-                      <span className="text-xs font-semibold text-slate-600">({currentDoctor?.qualifications || 'BAMS / MBBS'})</span>
+                      <span>{currentDoctor?.full_name ? (currentDoctor.full_name.startsWith('Dr.') ? currentDoctor.full_name : `Dr. ${currentDoctor.full_name}`) : 'Dr. Medical Officer'}</span>
+                      <span className="text-xs font-semibold text-slate-600">({currentDoctor?.qualifications || 'MBBS, MD'})</span>
                     </div>
                     <div className="text-[11px] text-slate-600 mt-0.5">
-                      {currentDoctor?.post || 'Senior Consultant'} • {currentDoctor?.department}
+                      {currentDoctor?.post || 'Senior Consultant'} • {currentDoctor?.department || 'General Medicine'}
                     </div>
                     <div className="text-[10px] text-slate-500 font-mono mt-0.5">
-                      Medical Council Reg. No: <span className="font-semibold text-slate-700">MCI/DMC-84920</span>
+                      Medical Council Reg. No: <span className="font-semibold text-slate-700">{currentDoctor?.registration_number || 'MCI/DMC-84920'}</span>
                     </div>
                   </div>
 
@@ -1503,7 +1532,7 @@ export default function DoctorDashboard() {
 
                   {/* Kiosk Intake Vitals & Triage Assessment Bar */}
                   <div className="bg-slate-50 border-t border-slate-200 px-3 py-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
-                    <div className="flex items-center gap-2 flex-wrap text-slate-700">
+                    <div className="flex items-center gap-1.5 flex-wrap text-slate-700">
                       <span className="font-bold text-slate-800 uppercase text-[10px] flex items-center gap-1">
                         <Activity className="w-3 h-3 text-emerald-600" /> Recorded Vitals:
                       </span>
@@ -1561,19 +1590,19 @@ export default function DoctorDashboard() {
                   </div>
 
                   {/* Medicines Table */}
-                  <div className="border border-slate-300 rounded-xl overflow-hidden shadow-xs">
-                    <table className="w-full border-collapse text-xs">
+                  <div className="border border-slate-300 rounded-xl overflow-x-auto shadow-xs">
+                    <table className="w-full min-w-[560px] sm:min-w-full border-collapse text-xs table-fixed">
                       <thead>
                         <tr className="bg-[#002F6C] text-white text-[11px] font-bold uppercase tracking-wider">
-                          <th className="py-2 px-2 text-center w-8 border-r border-blue-800">#</th>
-                          <th className="py-2 px-3 text-left border-r border-blue-800">Medicine Name & Formulation</th>
-                          <th className="py-2 px-3 text-left w-20 border-r border-blue-800">Strength</th>
-                          <th className="py-2 px-3 text-center w-36 border-r border-blue-800">
+                          <th className="py-2.5 px-2 text-center w-[6%] border-r border-blue-800">#</th>
+                          <th className="py-2.5 px-3 text-left w-[36%] border-r border-blue-800">Medicine Name & Formulation</th>
+                          <th className="py-2.5 px-3 text-left w-[14%] border-r border-blue-800">Strength</th>
+                          <th className="py-2.5 px-3 text-center w-[18%] border-r border-blue-800">
                             <div>Dosage Regimen</div>
                             <div className="text-[8px] font-normal text-blue-200 lowercase">morning - noon - night</div>
                           </th>
-                          <th className="py-2 px-3 text-center w-24 border-r border-blue-800">Duration</th>
-                          <th className="py-2 px-3 text-left">Instructions & Food Relation</th>
+                          <th className="py-2.5 px-3 text-center w-[12%] border-r border-blue-800">Duration</th>
+                          <th className="py-2.5 px-3 text-left w-[14%]">Instructions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200 font-sans text-[11px]">
@@ -1586,17 +1615,17 @@ export default function DoctorDashboard() {
                         ) : (
                           medications.filter(m => m.name.trim()).map((m, i) => (
                             <tr key={i} className={i % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'}>
-                              <td className="py-2 px-2 text-center font-bold text-slate-600 border-r border-slate-200">
+                              <td className="py-2.5 px-2 text-center font-bold text-slate-600 border-r border-slate-200">
                                 {i + 1}
                               </td>
-                              <td className="py-2 px-3 border-r border-slate-200">
+                              <td className="py-2.5 px-3 border-r border-slate-200 break-words">
                                 <div className="font-black text-slate-900 text-xs">{m.name}</div>
                                 <div className="text-[10px] text-slate-500 font-mono">Oral Formulation</div>
                               </td>
-                              <td className="py-2 px-3 font-semibold text-slate-700 border-r border-slate-200">
+                              <td className="py-2.5 px-3 font-semibold text-slate-700 border-r border-slate-200 break-words">
                                 {m.dosage || 'Standard'}
                               </td>
-                              <td className="py-2 px-3 text-center border-r border-slate-200">
+                              <td className="py-2.5 px-3 text-center border-r border-slate-200">
                                 <span className="inline-block px-2 py-0.5 bg-blue-50 text-blue-900 border border-blue-200 rounded font-mono font-bold text-xs">
                                   {m.frequency}
                                 </span>
@@ -1607,11 +1636,11 @@ export default function DoctorDashboard() {
                                    m.frequency.includes('1-1-1') ? 'Thrice daily' : 'As advised'}
                                 </div>
                               </td>
-                              <td className="py-2 px-3 text-center font-bold text-slate-800 border-r border-slate-200">
+                              <td className="py-2.5 px-3 text-center font-bold text-slate-800 border-r border-slate-200">
                                 {m.duration || '3 days'}
                               </td>
-                              <td className="py-2 px-3 font-medium text-slate-700">
-                                <span className="inline-block px-1.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded text-[10px] font-semibold mr-1">
+                              <td className="py-2.5 px-3 font-medium text-slate-700 break-words">
+                                <span className="inline-block px-1.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded text-[10px] font-semibold">
                                   {m.instructions || 'After meals'}
                                 </span>
                               </td>
@@ -1624,28 +1653,30 @@ export default function DoctorDashboard() {
                 </div>
 
                 {/* 6. DOCTOR'S CLINICAL ADVICE, INVESTIGATIONS & FOLLOW-UP */}
-                <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="mt-3.5 grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs items-stretch">
                   
                   {/* Left Box: Advice & Dietary Guidelines */}
-                  <div className="border border-slate-300 rounded-xl p-3 bg-white">
-                    <div className="font-bold text-[11px] text-slate-800 uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
-                      <FileText className="w-3.5 h-3.5 text-blue-900" />
-                      <span>Doctor's Clinical Advice & Lifestyle:</span>
-                    </div>
-                    <div className="text-[11px] text-slate-700 space-y-1">
-                      {doctorNotes ? (
-                        <p className="whitespace-pre-line text-slate-800 font-medium">{doctorNotes}</p>
-                      ) : (
-                        <ul className="list-disc pl-4 space-y-0.5 text-slate-600">
-                          <li>Take plenty of oral fluids (warm water, ORS, soups) to maintain hydration.</li>
-                          <li>Adequate physical rest for 3–5 days; avoid strenuous activities.</li>
-                          <li>Light, easily digestible, home-cooked food. Avoid oily and spicy items.</li>
-                          <li>Tepid water sponging if temperature exceeds 101°F.</li>
-                        </ul>
-                      )}
+                  <div className="border border-slate-300 rounded-xl p-3.5 bg-white flex flex-col justify-between">
+                    <div>
+                      <div className="font-bold text-[11px] text-slate-800 uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
+                        <FileText className="w-3.5 h-3.5 text-[#002F6C]" />
+                        <span>Doctor's Clinical Advice & Lifestyle:</span>
+                      </div>
+                      <div className="text-[11px] text-slate-700 space-y-1">
+                        {doctorNotes ? (
+                          <p className="whitespace-pre-line text-slate-800 font-medium">{doctorNotes}</p>
+                        ) : (
+                          <ul className="list-disc pl-4 space-y-0.5 text-slate-600">
+                            <li>Take plenty of oral fluids (warm water, ORS, soups) to maintain hydration.</li>
+                            <li>Adequate physical rest for 3–5 days; avoid strenuous activities.</li>
+                            <li>Light, easily digestible, home-cooked food. Avoid oily and spicy items.</li>
+                            <li>Tepid water sponging if temperature exceeds 101°F.</li>
+                          </ul>
+                        )}
+                      </div>
                     </div>
 
-                    <div className="mt-2 pt-2 border-t border-slate-200">
+                    <div className="mt-2.5 pt-2 border-t border-slate-200">
                       <span className="font-bold text-[10px] uppercase text-slate-600 block">Lab Investigations Advised:</span>
                       <span className="text-[10px] text-slate-600 italic">
                         Routine Hemogram (CBC), Urine Routine & ESR if fever persists beyond 3 days.
@@ -1654,13 +1685,13 @@ export default function DoctorDashboard() {
                   </div>
 
                   {/* Right Box: Follow-up & Emergency Warning */}
-                  <div className="border border-slate-300 rounded-xl p-3 bg-white flex flex-col justify-between">
+                  <div className="border border-slate-300 rounded-xl p-3.5 bg-white flex flex-col justify-between">
                     <div>
                       <div className="font-bold text-[11px] text-slate-800 uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
-                        <Clock className="w-3.5 h-3.5 text-blue-900" />
+                        <Clock className="w-3.5 h-3.5 text-[#002F6C]" />
                         <span>Review & Follow-up Instructions:</span>
                       </div>
-                      <div className="p-2 bg-amber-50/80 border border-amber-200 rounded-lg text-amber-950 font-bold text-[11px]">
+                      <div className="p-2.5 bg-amber-50/80 border border-amber-200 rounded-lg text-amber-950 font-bold text-[11px]">
                         📅 {followUp || 'Review in OPD after 5 days if symptoms persist.'}
                       </div>
                       <div className="text-[10px] text-slate-500 mt-1">
@@ -1668,11 +1699,11 @@ export default function DoctorDashboard() {
                       </div>
                     </div>
 
-                    <div className="mt-2 pt-2 border-t border-slate-200">
+                    <div className="mt-2.5 pt-2 border-t border-slate-200">
                       <div className="p-2 bg-rose-50 border border-rose-200 rounded-lg text-rose-900 text-[10px] flex items-start gap-1.5">
                         <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0 mt-0.5" />
                         <div>
-                          <strong>Emergency Red Flag:</strong> In case of breathlessness, high fever &gt;103°F, severe vomiting, or chest discomfort, report to Casualty/Emergency immediately.
+                          <strong>Emergency Red Flag:</strong> In case of breathlessness, high fever &gt;103°F, severe vomiting, or chest discomfort, report to AarogyaMitra 24x7 Emergency / Casualty immediately.
                         </div>
                       </div>
                     </div>
@@ -1681,13 +1712,13 @@ export default function DoctorDashboard() {
                 </div>
 
                 {/* 7. DIGITAL SIGNATURE & OFFICIAL VERIFICATION BLOCK */}
-                <div className="mt-3.5 pt-3 border-t-2 border-slate-300 flex items-end justify-between gap-4">
+                <div className="mt-3.5 pt-3 border-t-2 border-slate-300 flex flex-col sm:flex-row items-center sm:items-end justify-between gap-4 text-center sm:text-right">
                   
                   {/* Left: ABDM QR & Security Watermark */}
                   <div className="flex items-center gap-3">
-                    <div className="w-18 h-18 bg-white border border-slate-300 rounded-lg p-1.5 shadow-xs flex flex-col items-center justify-center shrink-0">
-                      <QrCode className="w-11 h-11 text-slate-800" />
-                      <span className="text-[7px] font-mono text-slate-500 mt-0.5">ABDM e-Prescription</span>
+                    <div className="w-20 h-20 bg-white border border-slate-300 rounded-lg p-1.5 shadow-xs flex flex-col items-center justify-center shrink-0">
+                      <QrCode className="w-12 h-12 text-slate-800" />
+                      <span className="text-[7.5px] font-mono text-slate-500 mt-0.5">ABDM e-Prescription</span>
                     </div>
                     <div>
                       <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-800">
@@ -1705,22 +1736,22 @@ export default function DoctorDashboard() {
 
                   {/* Right: Consulting Doctor Signature Seal */}
                   <div className="text-right">
-                    <div className="inline-block text-center min-w-[210px] p-2 bg-slate-50 border border-slate-200 rounded-xl">
+                    <div className="inline-block text-center min-w-[210px] p-2.5 bg-slate-50 border border-slate-200 rounded-xl shadow-xs">
                       {/* Stylized Digital Signature Graphic */}
                       <div className="font-serif italic text-lg text-[#002F6C] font-black border-b border-slate-300 pb-1">
-                        {currentDoctor?.full_name || 'Dr. Medical Officer'}
+                        {currentDoctor?.full_name ? (currentDoctor.full_name.startsWith('Dr.') ? currentDoctor.full_name : `Dr. ${currentDoctor.full_name}`) : 'Dr. Medical Officer'}
                       </div>
                       <div className="text-[9px] text-emerald-700 font-bold flex items-center justify-center gap-1 mt-1">
                         <CheckCircle2 className="w-3 h-3" /> Digitally Authenticated Signature
                       </div>
                       <div className="text-[11px] font-black text-slate-900 mt-0.5">
-                        {currentDoctor?.full_name}
+                        {currentDoctor?.full_name ? (currentDoctor.full_name.startsWith('Dr.') ? currentDoctor.full_name : `Dr. ${currentDoctor.full_name}`) : 'Dr. Medical Officer'}
                       </div>
                       <div className="text-[10px] text-slate-600 font-semibold">
-                        {currentDoctor?.qualifications} • {currentDoctor?.specialization}
+                        {currentDoctor?.qualifications || 'MBBS, MD'} • {currentDoctor?.specialization || currentDoctor?.department || 'General Medicine'}
                       </div>
-                      <div className="text-[9px] text-slate-500">
-                        Reg No: DMC/MCI-84920 • OPD Cabin {currentDoctor?.room_number || '205'}
+                      <div className="text-[9px] text-slate-500 font-mono">
+                        Reg No: {currentDoctor?.registration_number || 'DMC/MCI-84920'} • Cabin {currentDoctor?.room_number || '205'}
                       </div>
                     </div>
                   </div>
@@ -1728,7 +1759,7 @@ export default function DoctorDashboard() {
                 </div>
 
                 {/* 8. FOOTER LEGAL DISCLAIMER */}
-                <div className="mt-2.5 pt-2 border-t border-slate-200 text-center text-[9px] text-slate-500 leading-tight">
+                <div className="mt-3 pt-2 border-t border-slate-200 text-center text-[9px] text-slate-500 leading-tight">
                   This is a computer-generated medical prescription generated through AarogyaMitra Digital OPD Kiosk System compliant with the <strong>National Medical Commission (NMC) Regulations 2023</strong> and <strong>Ayushman Bharat Digital Mission (ABDM) EHR Standards</strong>. Valid without physical handwritten signature under Section 4 & 5 of the Information Technology Act, 2000.
                 </div>
 
@@ -1736,10 +1767,10 @@ export default function DoctorDashboard() {
             </div>
 
             {/* Modal Bottom Toolbar (Hidden during actual print) */}
-            <div className="p-3 bg-slate-100 border-t border-slate-200 flex items-center justify-between gap-3 shrink-0 no-print">
+            <div className="px-5 py-3 bg-slate-100 border-t border-slate-200 flex items-center justify-between gap-3 shrink-0 print:hidden">
               <div className="text-xs text-slate-500 flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                <span>Digitally encrypted and synchronized with patient's ABHA account.</span>
+                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Digitally encrypted and synchronized with patient's ABHA health locker.</span>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -1749,11 +1780,11 @@ export default function DoctorDashboard() {
                   Close Preview
                 </button>
                 <button
-                  onClick={() => window.print()}
-                  className="px-5 py-2 bg-[#002F6C] hover:bg-blue-900 text-white rounded-xl text-xs font-bold shadow flex items-center gap-1.5 transition"
+                  onClick={handlePrintPrescription}
+                  className="px-5 py-2 bg-[#002F6C] hover:bg-blue-800 text-white rounded-xl text-xs font-bold shadow flex items-center gap-1.5 transition active:scale-95"
                 >
                   <Printer className="w-4 h-4" />
-                  <span>Print Prescription Slip</span>
+                  <span>Print / Save PDF</span>
                 </button>
               </div>
             </div>

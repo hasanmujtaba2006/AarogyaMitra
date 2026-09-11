@@ -1,4 +1,9 @@
+import json
+import socket
 import time
+import urllib.request
+from urllib.parse import urlparse
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
@@ -10,6 +15,52 @@ engine_kwargs = {
     "pool_pre_ping": True,
 }
 
+def resolve_hostaddr(url: str) -> str | None:
+    """
+    Resolves hostname to IP address to bypass unreliable or restricted
+    local ISP / Wi-Fi DNS servers that refuse resolution for cloud endpoints.
+    Uses Google DNS-over-HTTPS (DoH) fallback or known AWS Neon IP pool.
+    """
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        if not hostname or hostname in ("localhost", "127.0.0.1", "::1"):
+            return None
+
+        # 1. Try local system DNS
+        try:
+            ip = socket.gethostbyname(hostname)
+            return ip
+        except Exception:
+            pass
+
+        # 2. Try Google Public DNS-over-HTTPS fallback
+        try:
+            req = urllib.request.Request(
+                f"https://dns.google/resolve?name={hostname}&type=A",
+                headers={"User-Agent": "Mozilla/5.0"}
+            )
+            with urllib.request.urlopen(req, timeout=4) as response:
+                data = json.loads(response.read().decode())
+                for ans in data.get("Answer", []):
+                    if ans.get("type") == 1:
+                        resolved_ip = ans.get("data")
+                        if resolved_ip:
+                            print(f"Database DNS: Resolved {hostname} to {resolved_ip} via Google DoH.")
+                            return resolved_ip
+        except Exception as doh_err:
+            print(f"Database DNS: DoH fallback notice ({doh_err}).")
+
+        # 3. Known Neon us-east-2 AWS gateway fallback
+        if "neon.tech" in hostname:
+            fallback_ip = "18.226.144.228"
+            print(f"Database DNS: Using fallback IP {fallback_ip} for {hostname}.")
+            return fallback_ip
+
+    except Exception as e:
+        print(f"Database DNS helper notice: {e}")
+    return None
+
 if settings.DATABASE_URL.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
 else:
@@ -17,6 +68,10 @@ else:
     connect_args = {
         "connect_timeout": 15  # Gives Neon 15 seconds to wake up from cold start
     }
+    resolved_ip = resolve_hostaddr(settings.DATABASE_URL)
+    if resolved_ip:
+        connect_args["hostaddr"] = resolved_ip
+
     engine_kwargs["pool_recycle"] = 300  # Recycle connections every 5 minutes
 
 engine = None

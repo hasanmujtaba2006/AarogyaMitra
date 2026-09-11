@@ -71,7 +71,7 @@ export default function AbhaCard({
       {/* Official ABDM ABHA Digital Health Card */}
       <div 
         id="abha-card-printable"
-        className="w-full max-w-lg bg-gradient-to-br from-white via-slate-50 to-emerald-50/30 rounded-2xl border-2 border-slate-200 shadow-xl overflow-hidden relative text-slate-800 transition-all hover:shadow-2xl"
+        className="w-full max-w-lg bg-gradient-to-br from-white via-slate-50 to-emerald-50/30 rounded-2xl border-2 border-slate-200 shadow-xl overflow-hidden relative text-slate-800 transition-all hover:shadow-2xl print:max-w-[480px] print:w-[480px] print:mx-auto print:my-6 print:shadow-none print:border-slate-300 break-inside-avoid print-avoid-break"
       >
         {/* National Tricolor Top Ribbon */}
         <div className="h-2 w-full flex">
@@ -244,7 +244,7 @@ export default function AbhaCard({
 
       {/* Action Controls (unless compact preview mode) */}
       {!compact && (
-        <div className="w-full max-w-lg mt-4 sm:mt-5 space-y-2.5 sm:space-y-3">
+        <div className="w-full max-w-lg mt-4 sm:mt-5 space-y-2.5 sm:space-y-3 print:hidden">
           {onProceed && (
             <button
               type="button"

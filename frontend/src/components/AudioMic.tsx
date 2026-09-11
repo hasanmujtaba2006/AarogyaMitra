@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { Mic, MicOff, Send, MessageSquare, AlertCircle, Volume2, VolumeX, Square, Globe } from 'lucide-react'
-import { LanguageCode } from '@/context/LanguageContext'
+import { LanguageCode, useLanguage } from '@/context/LanguageContext'
 
 interface Message {
   role: 'user' | 'assistant';
@@ -12,14 +12,28 @@ interface Message {
 }
 
 interface AudioMicProps {
-  language: string;
+  language?: string; // App Language for UI chrome / translations
+  conversationLanguage?: LanguageCode; // Active language for doctor dialogue and speech
   messages: Message[];
   onSendMessage: (text: string) => void;
   isProcessing: boolean;
   onLanguageChange?: (lang: LanguageCode) => void;
+  onConversationLanguageChange?: (lang: LanguageCode) => void;
 }
 
-export default function AudioMic({ language, messages, onSendMessage, isProcessing, onLanguageChange }: AudioMicProps) {
+export default function AudioMic({
+  language: propLanguage,
+  conversationLanguage: propConversationLanguage,
+  messages,
+  onSendMessage,
+  isProcessing,
+  onLanguageChange,
+  onConversationLanguageChange
+}: AudioMicProps) {
+  const { language: contextAppLang } = useLanguage()
+  const appLanguage = propLanguage || contextAppLang || 'en'
+  const activeConversationLanguage: LanguageCode = (propConversationLanguage || (propLanguage as LanguageCode) || 'en') as LanguageCode
+
   const [isListening, setIsListening] = useState(false)
   const [textInput, setTextInput] = useState('')
   const [speechError, setSpeechError] = useState('')
@@ -46,11 +60,11 @@ export default function AudioMic({ language, messages, onSendMessage, isProcessi
     }
   }, [])
 
-  // Multi-lingual UI translations
+  // Multi-lingual UI translations for AudioMic component chrome (follows App Language)
   const t = (en: string, hi: string, ta: string, te: string) => {
-    if (language === 'hi') return hi
-    if (language === 'ta') return ta
-    if (language === 'te') return te
+    if (appLanguage === 'hi') return hi
+    if (appLanguage === 'ta') return ta
+    if (appLanguage === 'te') return te
     return en
   }
 
@@ -70,9 +84,9 @@ export default function AudioMic({ language, messages, onSendMessage, isProcessi
         
         // Map local languages to BCP-47 speech recognition locales
         let locale = 'en-IN'
-        if (language === 'hi') locale = 'hi-IN'
-        if (language === 'ta') locale = 'ta-IN'
-        if (language === 'te') locale = 'te-IN'
+        if (activeConversationLanguage === 'hi') locale = 'hi-IN'
+        if (activeConversationLanguage === 'ta') locale = 'ta-IN'
+        if (activeConversationLanguage === 'te') locale = 'te-IN'
         
         recognition.lang = locale
 
@@ -115,7 +129,7 @@ export default function AudioMic({ language, messages, onSendMessage, isProcessi
         recognitionRef.current = recognition
       }
     }
-  }, [language])
+  }, [activeConversationLanguage])
 
   const stopSpeaking = () => {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
@@ -227,7 +241,7 @@ export default function AudioMic({ language, messages, onSendMessage, isProcessi
     const cleanedText = text.replace(/[*_#`~]/g, '').trim()
 
     // Determine voice language: if text contains Devanagari, Tamil, or Telugu Unicode, lock to that language
-    let lang = targetLang || language || 'en'
+    let lang = targetLang || activeConversationLanguage || 'en'
     if (/[\u0900-\u097F]/.test(cleanedText)) {
       lang = 'hi'
     } else if (/[\u0B80-\u0BFF]/.test(cleanedText)) {
@@ -286,14 +300,18 @@ export default function AudioMic({ language, messages, onSendMessage, isProcessi
     }
   }
 
-  // Helper to get the introductory instructions text in current language
-  const getIntroInstructionsText = () => {
-    return t(
-      'Press the Microphone below to speak. Tell your health issue to our AI doctor.',
-      'बोलने के लिए नीचे दिए गए माइक्रोफ़ोन को दबाएं। अपनी स्वास्थ्य समस्या हमारे AI डॉक्टर को बताएं।',
-      'பேசுவதற்கு கீழே உள்ள மைக்ரோஃபோனை அழுத்தவும். உங்கள் உடல்நலப் பிரச்சினையை எங்கள் AI மருத்துவரிடம் தெரிவிக்கவும்.',
-      'మాట్లాడటానికి క్రింది మైక్రోఫోన్‌ను నొక్కండి. మీ ఆరోగ్య సమస్యను మా AI వైద్యుడికి చెప్పండి.'
-    )
+  // Helper to get the introductory instructions text in current conversational language
+  const getIntroInstructionsText = (lang: string = activeConversationLanguage) => {
+    if (lang === 'hi') {
+      return 'बोलने के लिए नीचे दिए गए माइक्रोफ़ोन को दबाएं। अपनी स्वास्थ्य समस्या हमारे AI डॉक्टर को बताएं।'
+    }
+    if (lang === 'ta') {
+      return 'பேசுவதற்கு கீழே உள்ள மைக்ரோஃபோனை அழுத்தவும். உங்கள் உடல்நலப் பிரச்சினையை எங்கள் AI மருத்துவரிடம் தெரிவிக்கவும்.'
+    }
+    if (lang === 'te') {
+      return 'మాట్లాడటానికి క్రింది మైక్రోఫోన్‌ను నొక్కండి. మీ ఆరోగ్య సమస్యను మా AI వైద్యుడికి చెప్పండి.'
+    }
+    return 'Press the Microphone below to speak. Tell your health issue to our AI doctor.'
   }
 
   // Automatic Voice Output: Triggered immediately when a new AI response arrives
@@ -307,25 +325,25 @@ export default function AudioMic({ language, messages, onSendMessage, isProcessi
       lastSpokenIndexRef.current = lastIdx
       if (autoSpeak) {
         const textToSpeak = lastMsg.translated_message || lastMsg.message
-        const langToUse = lastMsg.spoken_language || language || 'en'
+        const langToUse = lastMsg.spoken_language || activeConversationLanguage || 'en'
         const timer = setTimeout(() => {
           handleSpeak(textToSpeak, langToUse, lastIdx)
         }, 200)
         return () => clearTimeout(timer)
       }
     }
-  }, [messages, autoSpeak, language])
+  }, [messages, autoSpeak, activeConversationLanguage])
 
-  // Automatic Voice Prompt when Consulting Doctor AI opens (or language changes) with zero messages
+  // Automatic Voice Prompt when Consulting Doctor AI opens (or conversational language changes) with zero messages
   useEffect(() => {
     if (messages.length === 0 && autoSpeak) {
-      const introText = getIntroInstructionsText()
+      const introText = getIntroInstructionsText(activeConversationLanguage)
       const timer = setTimeout(() => {
-        handleSpeak(introText, language, -1)
+        handleSpeak(introText, activeConversationLanguage, -1)
       }, 500)
       return () => clearTimeout(timer)
     }
-  }, [language, messages.length === 0, autoSpeak])
+  }, [activeConversationLanguage, messages.length === 0, autoSpeak])
 
   return (
     <div className="flex-1 flex flex-col w-full max-w-4xl mx-auto bg-white rounded-2xl sm:rounded-3xl border-2 sm:border-4 border-blue-900 shadow-xl sm:shadow-2xl overflow-hidden min-h-[480px] sm:min-h-[600px] my-2 sm:my-6">
@@ -386,14 +404,18 @@ export default function AudioMic({ language, messages, onSendMessage, isProcessi
             { code: 'ta', label: 'தமிழ்' },
             { code: 'te', label: 'తెలుగు' }
           ].map((l) => {
-            const isSelected = language === l.code
+            const isSelected = activeConversationLanguage === l.code
             return (
               <button
                 key={l.code}
                 type="button"
                 onClick={() => {
                   stopSpeaking()
-                  if (onLanguageChange) onLanguageChange(l.code as LanguageCode)
+                  if (onConversationLanguageChange) {
+                    onConversationLanguageChange(l.code as LanguageCode)
+                  } else if (onLanguageChange) {
+                    onLanguageChange(l.code as LanguageCode)
+                  }
                 }}
                 className={`px-2 sm:px-3 py-1 rounded-lg text-xs font-bold transition-all ${
                   isSelected
@@ -418,7 +440,7 @@ export default function AudioMic({ language, messages, onSendMessage, isProcessi
                 if (isSpeaking && currentSpeakingMsgIndex === -1) {
                   stopSpeaking()
                 } else {
-                  handleSpeak(getIntroInstructionsText(), language, -1)
+                  handleSpeak(getIntroInstructionsText(activeConversationLanguage), activeConversationLanguage, -1)
                 }
               }}
               className={`p-4 rounded-3xl mb-3 sm:mb-4 transition-all flex flex-col items-center gap-2 group cursor-pointer ${
@@ -482,7 +504,7 @@ export default function AudioMic({ language, messages, onSendMessage, isProcessi
                         if (isMsgSpeaking) {
                           stopSpeaking()
                         } else {
-                          handleSpeak(primaryText, msg.spoken_language || language, index)
+                          handleSpeak(primaryText, msg.spoken_language || activeConversationLanguage, index)
                         }
                       }}
                       className={`flex items-center gap-1 sm:gap-1.5 text-xs sm:text-sm font-bold px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full border shadow-sm transition-all ${
@@ -534,7 +556,7 @@ export default function AudioMic({ language, messages, onSendMessage, isProcessi
       </div>
 
       {/* Interaction panel: Big Microphone and Text input */}
-      <div className="border-t-2 sm:border-t-4 border-slate-200 p-3 sm:p-6 bg-white shrink-0 flex flex-col gap-3 sm:gap-4">
+      <div className="border-t-2 sm:border-t-4 border-slate-200 p-2.5 sm:p-6 bg-white shrink-0 flex flex-col gap-2.5 sm:gap-4">
         {speechError && (
           <div className="bg-amber-50 border-2 border-amber-500 text-amber-800 px-3 sm:px-4 py-2 sm:py-3 rounded-xl flex items-center gap-2 text-xs sm:text-lg font-bold">
             <AlertCircle className="w-4 h-4 sm:w-6 sm:h-6 shrink-0" />
